@@ -1051,6 +1051,8 @@ void EffectModule::addEffectToHal_l()
 // start_l() must be called with EffectChain::mutex() held
 status_t EffectModule::start_l()
 {
+    // set volume before enabling an effect
+    getCallback()->resetVolume();
     status_t status;
     {
         audio_utils::lock_guard _l(mutex());
