@@ -62,7 +62,10 @@ cc_binary {
         "-Wextra",
         "-Werror",
         "-Wno-unused-parameter",
-    ],
+    ] + select(soong_config_variable("camera", "package_name"), {
+        any @ flag_val: ["-DCAMERA_PACKAGE_NAME=\"" + flag_val + "\""],
+        default: [],
+    }),
 
     init_rc: ["cameraserver.rc"],
 
