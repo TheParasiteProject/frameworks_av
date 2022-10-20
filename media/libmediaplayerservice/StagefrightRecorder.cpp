@@ -137,6 +137,7 @@ StagefrightRecorder::StagefrightRecorder(const AttributionSourceState& client)
       mRTPSockDscp(0),
       mRTPSockOptEcn(0),
       mRTPSockNetwork(0),
+      mRTPVidEncCoeffPercent(80),
       mLastSeqNo(0),
       mStarted(false),
       mSelectedDeviceId(AUDIO_PORT_HANDLE_NONE),
@@ -598,7 +599,7 @@ status_t StagefrightRecorder::setParamVideoEncodingBitRate(int32_t bitRate) {
         // Regular I frames may overload the network so we reduce the bitrate to allow
         // margins for the I frame overruns.
         // Still send requested bitrate (TMMBR) in the reply (TMMBN).
-        const float coefficient = 0.8f;
+        const float coefficient = mRTPVidEncCoeffPercent / 100.f;
         mVideoBitRate = (bitRate * coefficient) / 1000 * 1000;
     }
     if (mOutputFormat == OUTPUT_FORMAT_RTP_AVP && mStarted && mPauseStartTimeUs == 0) {
@@ -933,6 +934,11 @@ status_t StagefrightRecorder::requestIDRFrame() {
     return ret;
 }
 
+status_t StagefrightRecorder::setRTPVidEncCoeffPercent(int32_t percent) {
+    mRTPVidEncCoeffPercent = percent;
+    return OK;
+}
+
 status_t StagefrightRecorder::setLogSessionId(const String8 &log_session_id) {
     ALOGV("setLogSessionId: %s", log_session_id.c_str());
 
@@ -1113,6 +1119,11 @@ status_t StagefrightRecorder::setParameter(
         int64_t networkHandle;
         if (safe_strtoi64(value.c_str(), &networkHandle)) {
             return setSocketNetwork(networkHandle);
+        }
+    } else if (key == "rtp-param-vid-enc-coeff-percent") {
+        int32_t percent;
+        if (safe_strtoi32(value.c_str(), &percent)) {
+            return setRTPVidEncCoeffPercent(percent);
         }
     } else if (key == "log-session-id") {
         return setLogSessionId(value);
