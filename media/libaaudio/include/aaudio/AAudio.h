@@ -893,6 +893,24 @@ enum {
                                    AAUDIO_CHANNEL_TOP_BACK_RIGHT,
     /**
      * Supported for only Output
+     * Available since API level 37.
+     */
+    AAUDIO_CHANNEL_13POINT0 = AAUDIO_CHANNEL_FRONT_LEFT |
+                              AAUDIO_CHANNEL_FRONT_RIGHT |
+                              AAUDIO_CHANNEL_FRONT_CENTER |
+                              AAUDIO_CHANNEL_SIDE_LEFT |
+                              AAUDIO_CHANNEL_SIDE_RIGHT |
+                              AAUDIO_CHANNEL_TOP_FRONT_LEFT |
+                              AAUDIO_CHANNEL_TOP_FRONT_RIGHT |
+                              AAUDIO_CHANNEL_TOP_FRONT_CENTER |
+                              AAUDIO_CHANNEL_TOP_BACK_LEFT |
+                              AAUDIO_CHANNEL_TOP_BACK_RIGHT |
+                              AAUDIO_CHANNEL_BOTTOM_FRONT_LEFT |
+                              AAUDIO_CHANNEL_BOTTOM_FRONT_RIGHT |
+                              AAUDIO_CHANNEL_BOTTOM_FRONT_CENTER,
+
+    /**
+     * Supported for only Output
      */
     AAUDIO_CHANNEL_9POINT1POINT4 = AAUDIO_CHANNEL_7POINT1POINT4 |
                                    AAUDIO_CHANNEL_FRONT_WIDE_LEFT |
