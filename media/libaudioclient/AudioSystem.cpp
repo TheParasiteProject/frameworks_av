@@ -3114,9 +3114,6 @@ void AudioSystem::AudioPolicyServiceClient::onServiceDied() {
     for (const auto& callback : mAudioPortCallbacks) {
         callback->onServiceDied();
     }
-    for (const auto& callback : mAudioVolumeGroupCallbacks) {
-        callback->onServiceDied();
-    }
 }
 
 ConversionResult<record_client_info_t>
