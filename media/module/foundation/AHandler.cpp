@@ -41,14 +41,18 @@ void AHandler::deliverMessage(const sp<AMessage> &msg) {
 }
 
 void AHandler::setDeliveryStatus(bool delivering, uint32_t what, int64_t startUs) {
+#ifndef MEDIA_NEEDS_MUTEXLOCK_DISABLED_FOR_VTSERVICE
     AutoMutex autoLock(mLock);
+#endif
     mDeliveringMessage = delivering;
     mCurrentMessageWhat = what;
     mCurrentMessageStartTimeUs = startUs;
 }
 
 void AHandler::getDeliveryStatus(bool& delivering, uint32_t& what, int64_t& durationUs) {
+#ifndef MEDIA_NEEDS_MUTEXLOCK_DISABLED_FOR_VTSERVICE
     AutoMutex autoLock(mLock);
+#endif
     delivering = mDeliveringMessage;
     what = mCurrentMessageWhat;
     durationUs = mCurrentMessageStartTimeUs == 0 ?
