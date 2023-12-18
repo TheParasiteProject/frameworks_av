@@ -3765,7 +3765,6 @@ status_t AudioPolicyManager::setVolumeIndexForGroup(volume_group_t group,
     // to AUDIO_STREAM_VOICE_CALL to match with relevant playback activity
     VolumeSource activityVs = (vs == toVolumeSource(AUDIO_STREAM_BLUETOOTH_SCO, false)) ?
             toVolumeSource(AUDIO_STREAM_VOICE_CALL, false) : vs;
-    product_strategy_t strategy = PRODUCT_STRATEGY_NONE;
 
     status = setVolumeCurveIndex(index, muted, device, curves);
     if (status != NO_ERROR) {
@@ -3778,7 +3777,6 @@ status_t AudioPolicyManager::setVolumeIndexForGroup(volume_group_t group,
     if (!curCurvAttrs.empty() && curCurvAttrs.front() != defaultAttr) {
         auto attr = curCurvAttrs.front();
         curSrcDevices = mEngine->getOutputDevicesForAttributes(attr, nullptr, false).types();
-        strategy = mEngine->getProductStrategyForAttributes(attr);
     } else if (!curves.getStreamTypes().empty()) {
         auto stream = curves.getStreamTypes().front();
         curSrcDevices = mEngine->getOutputDevicesForStream(stream, false).types();
@@ -3829,41 +3827,10 @@ status_t AudioPolicyManager::setVolumeIndexForGroup(volume_group_t group,
         // If a higher priority strategy is active, and the output is routed to a device with a
         // HW Gain management, do not change the volume
         if (desc->useHwGain()) {
-            applyVolume = false;
             bool swMute = com_android_media_audio_ring_my_car() ? curves.isMuted() : (index == 0);
             // If the volume source is active with higher priority source, ensure at least Sw Muted
             desc->setSwMute(swMute, vs, curves.getStreamTypes(), curDevices, 0 /*delayMs*/);
-            for (const auto &productStrategy : mEngine->getOrderedProductStrategies()) {
-                auto activeClients = desc->clientsList(true /*activeOnly*/, productStrategy,
-                                                       false /*preferredDevice*/);
-                if (activeClients.empty()) {
-                    continue;
-                }
-                bool isPreempted = false;
-                bool isHigherPriority = strategy == PRODUCT_STRATEGY_NONE
-                        || productStrategy < strategy;
-                for (const auto &client : activeClients) {
-                    if (isHigherPriority && (client->volumeSource() != activityVs)) {
-                        ALOGV("%s: Strategy=%d (\nrequester:\n"
-                              " volumeGroup=%d)\n"
-                              " higher priority source active:\n"
-                              " volumeGroup=%d attributes=%s) \n"
-                              " on output %zu, bailing out", __func__, productStrategy, group,
-                              client->volumeSource(), toString(client->attributes()).c_str(), i);
-                        applyVolume = false;
-                        isPreempted = true;
-                        break;
-                    }
-                    // However, continue for loop to ensure no higher prio clients running on output
-                    if (client->volumeSource() == activityVs) {
-                        applyVolume = true;
-                    }
-                }
-                if (isPreempted || applyVolume) {
-                    break;
-                }
-            }
-            if (!applyVolume) {
+            if (!desc->canSetVolumeForVolumeSource(activityVs)) {
                 continue; // next output
             }
         }
@@ -8722,7 +8689,9 @@ status_t AudioPolicyManager::checkAndSetVolume(IVolumeCurves &curves,
                outputDesc->getMuteCount(volumeSource), outputDesc->isActive(volumeSource));
         return NO_ERROR;
     }
-
+    if (!outputDesc->canSetVolumeForVolumeSource(volumeSource)) {
+        return NO_ERROR;
+    }
     bool isVoiceVolSrc;
     bool isBtScoVolSrc;
     if (!isVolumeConsistentForCalls(
