@@ -2771,11 +2771,11 @@ ssize_t PlaybackThread::Tracks<T>::remove(const sp<T>& track)
     return index;
 }
 
-void AudioFlinger::PlaybackThread::listAppVolumes(std::set<media::AppVolume> &container)
+void PlaybackThread::listAppVolumes(std::set<media::AppVolume> &container)
 {
-    Mutex::Autolock _l(mLock);
-    for (sp<Track> track : mTracks) {
-        if (!track->getPackageName().isEmpty()) {
+    audio_utils::lock_guard _l(mutex());
+    for (sp<IAfTrack> track : mTracks) {
+        if (!track->getPackageName().empty()) {
             media::AppVolume av;
             av.packageName = track->getPackageName();
             av.muted = track->isAppMuted();
@@ -2786,10 +2786,10 @@ void AudioFlinger::PlaybackThread::listAppVolumes(std::set<media::AppVolume> &co
     }
 }
 
-status_t AudioFlinger::PlaybackThread::setAppVolume(const String8& packageName, const float value)
+status_t PlaybackThread::setAppVolume(const String8& packageName, const float value)
 {
-    Mutex::Autolock _l(mLock);
-    for (sp<Track> track : mTracks) {
+    audio_utils::lock_guard _l(mutex());
+    for (sp<IAfTrack> track : mTracks) {
         if (packageName == track->getPackageName()) {
             track->setAppVolume(value);
         }
@@ -2797,10 +2797,10 @@ status_t AudioFlinger::PlaybackThread::setAppVolume(const String8& packageName, 
     return NO_ERROR;
 }
 
-status_t AudioFlinger::PlaybackThread::setAppMute(const String8& packageName, const bool value)
+status_t PlaybackThread::setAppMute(const String8& packageName, const bool value)
 {
-    Mutex::Autolock _l(mLock);
-    for (sp<Track> track : mTracks) {
+    audio_utils::lock_guard _l(mutex());
+    for (sp<IAfTrack> track : mTracks) {
         if (packageName == track->getPackageName()) {
             track->setAppMute(value);
         }
