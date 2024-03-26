@@ -95,12 +95,11 @@ ConversionResult<AttributesGroup> aidl2legacy_AudioHalAttributeGroup_AttributesG
 ConversionResult<ProductStrategy> aidl2legacy_AudioHalProductStrategy_ProductStrategy(
         const media::audio::common::AudioHalProductStrategy& aidl) {
     ProductStrategy ps;
-    ps.name = aidl.name.value_or(VALUE_OR_RETURN(
-                    aidlAudioHalProductStrategyIdToName(aidl.id)));
+    ps.name = aidl.name.value_or(VALUE_OR_RETURN(aidlAudioHalProductStrategyIdToName(aidl.id)));
     ps.id = aidl.id;
     ps.attributesGroups = VALUE_OR_RETURN(convertContainer<AttributesGroups>(
-                    aidl.attributesGroups,
-                    aidl2legacy_AudioHalAttributeGroup_AttributesGroup));
+                    aidl.attributesGroups,aidl2legacy_AudioHalAttributeGroup_AttributesGroup));
+    ps.zoneId = aidl.zoneId;
     return ps;
 }
 
