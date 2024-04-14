@@ -1051,6 +1051,8 @@ void EffectModule::addEffectToHal_l()
 // start() must be called with PlaybackThread::mutex() or EffectChain::mutex() held
 status_t EffectModule::start()
 {
+    // set volume before enabling an effect
+    getCallback()->resetVolume();
     status_t status;
     {
         audio_utils::lock_guard _l(mutex());
@@ -2190,6 +2192,10 @@ void EffectChain::clearInputBuffer()
 {
     audio_utils::lock_guard _l(mutex());
     clearInputBuffer_l();
+
+    for (size_t i = 0; i < mEffects.size(); i++) {
+        mEffects[i]->reset_l();
+    }
 }
 
 // Must be called with EffectChain::mutex() locked
@@ -2805,6 +2811,11 @@ static const effect_uuid_t SL_IID_VOLUME_ = { 0x09e8ede0, 0xddde, 0x11db, 0xb4f6
 const effect_uuid_t * const SL_IID_VOLUME = &SL_IID_VOLUME_;
 #endif //OPENSL_ES_H_
 
+// Dolby Atmos
+static const effect_uuid_t SL_IID_DAP_ = // 46d279d9-9be7-453d-9d7c-ef937f675587
+{ 0x46d279d9, 0x9be7, 0x453d, 0x9d7c, {0xef, 0x93, 0x7f, 0x67, 0x55, 0x87} };
+const effect_uuid_t * const SL_IID_DAP = &SL_IID_DAP_;
+
 /* static */
 bool EffectChain::isEffectEligibleForBtNrecSuspend(const effect_uuid_t *type)
 {
@@ -2823,7 +2834,8 @@ bool EffectChain::isEffectEligibleForSuspend(const effect_descriptor_t& desc)
         (((desc.flags & EFFECT_FLAG_TYPE_MASK) == EFFECT_FLAG_TYPE_AUXILIARY) ||
          (memcmp(&desc.type, SL_IID_VISUALIZATION, sizeof(effect_uuid_t)) == 0) ||
          (memcmp(&desc.type, SL_IID_VOLUME, sizeof(effect_uuid_t)) == 0) ||
-         (memcmp(&desc.type, SL_IID_DYNAMICSPROCESSING, sizeof(effect_uuid_t)) == 0))) {
+         (memcmp(&desc.type, SL_IID_DYNAMICSPROCESSING, sizeof(effect_uuid_t)) == 0) ||
+         (memcmp(&desc.type, SL_IID_DAP, sizeof(effect_uuid_t)) == 0))) {
         return false;
     }
     return true;

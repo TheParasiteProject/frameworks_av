@@ -358,9 +358,21 @@ void NuPlayer::Decoder::onConfigure(const sp<AMessage> &format) {
     }
     rememberCodecSpecificData(format);
 
-    // the following should work in configured state
-    CHECK_EQ((status_t)OK, mCodec->getOutputFormat(&mOutputFormat));
-    CHECK_EQ((status_t)OK, mCodec->getInputFormat(&mInputFormat));
+    // Do not assume mCodec is in configured state. There are some race conditions which will
+    // move mCodec to error state after configure() has returned success.
+    // As a temporary fix, handle the error case cleanly, without assert check.
+    err = mCodec->getOutputFormat(&mOutputFormat);
+    if (err == OK) {
+        err = mCodec->getInputFormat(&mInputFormat);
+    }
+    if (err != OK) {
+        ALOGE("Failed to get input/output format from [%s] decoder (err=%d)",
+                mComponentName.c_str(), err);
+        mCodec->release();
+        mCodec.clear();
+        handleError(err);
+        return;
+    }
 
     {
         Mutex::Autolock autolock(mStatsLock);
@@ -456,7 +468,17 @@ void NuPlayer::Decoder::onSetParameters(const sp<AMessage> &params) {
         }
 
         sp<AMessage> codecParams = new AMessage();
-        codecParams->setFloat("operating-rate", decodeFrameRate * mPlaybackSpeed);
+        float operating_rate = decodeFrameRate * mPlaybackSpeed;
+        // Historically, we would delay input buffer requests by 10ms, which may be problematic for
+        // framerates higher than 100 fps. For lower framerates we keep the historic default to
+        // minimize risk of regression. For higher framerates, we adjust the delay to the operation
+        // rate. See b/208475704.
+        if (operating_rate > 100.f) {
+            mRequestInputBufferDelayUs = (int64_t)(1000000.f / operating_rate);
+        } else {
+            mRequestInputBufferDelayUs = kDefaultRequestInputBufferDelayUs;
+        }
+        codecParams->setFloat("operating-rate", operating_rate);
         mCodec->setParameters(codecParams);
     }
 

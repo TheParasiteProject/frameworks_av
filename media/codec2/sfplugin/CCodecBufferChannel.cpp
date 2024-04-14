@@ -88,7 +88,7 @@ const static size_t kDequeueTimeoutNs = 0;
 // If app goes into background, decoding paused. we have WA logic in HAL to sleep some actions.
 // This value is to monitor if decoding is paused then we can signal a new empty work to HAL
 // after app resume to foreground to notify HAL something
-const static uint64_t kPipelinePausedTimeoutMs = 500;
+const static uint64_t kPipelinePausedTimeoutMs = 1000;
 
 static bool areRenderMetricsEnabled() {
     std::string v = GetServerConfigurableFlag("media_native", "render_metrics_enabled", "false");
@@ -1662,8 +1662,14 @@ status_t CCodecBufferChannel::start(
                     padding = 0;
                 }
                 if (delay || padding) {
-                    // We need write access to the buffers, and we're already in
-                    // array mode.
+                    // We need write access to the buffers, so turn them into array mode.
+                    // TODO: b/321930152 - define SkipCutOutputBuffers that takes output from
+                    // component, runs it through SkipCutBuffer and allocate local buffer to be
+                    // used by fwk. Make initSkipCutBuffer() return OutputBuffers similar to
+                    // toArrayMode().
+                    if (!output->buffers->isArrayMode()) {
+                        output->buffers = output->buffers->toArrayMode(numOutputSlots);
+                    }
                     output->buffers->initSkipCutBuffer(delay, padding, sampleRate, channelCount);
                 }
             }

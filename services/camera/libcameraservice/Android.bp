@@ -118,9 +118,12 @@ cc_defaults {
 
 cc_library {
     name: "libcameraservice",
-
     defaults: [
         "libcameraservice_deps",
+        "needs_camera_boottime_defaults",
+        "camera_package_name_defaults",
+        "camera_needs_client_info_lib_defaults",
+        "camera_needs_client_info_lib_oplus_defaults",
     ],
     // Camera service source
 
