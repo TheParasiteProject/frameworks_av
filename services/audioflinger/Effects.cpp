@@ -1052,7 +1052,7 @@ void EffectModule::addEffectToHal_l()
 status_t EffectModule::start_l()
 {
     // set volume before enabling an effect
-    getCallback()->resetVolume();
+    getCallback()->resetVolume_l();
     status_t status;
     {
         audio_utils::lock_guard _l(mutex());
