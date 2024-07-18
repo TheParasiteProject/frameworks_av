@@ -8015,10 +8015,38 @@ status_t AudioPolicyManager::checkAndSetVolume(IVolumeCurves &curves,
     outputDesc->setVolume(volumeDb, muted, volumeSource, curves.getStreamTypes(),
             deviceTypes, delayMs, force, isVoiceVolSrc);
 
+    setMediaHapticVolume(volumeSource, outputDesc, volumeDb, delayMs);
+
     if (outputDesc == mPrimaryOutput && (isVoiceVolSrc || isBtScoVolSrc)) {
         setVoiceVolume(index, curves, isVoiceVolSrc, delayMs);
     }
     return NO_ERROR;
+}
+
+void AudioPolicyManager::setMediaHapticVolume(VolumeSource volumeSource,
+                                              const sp<AudioOutputDescriptor>& outputDesc,
+                                              float volumeDb,
+                                              int delayMs)
+{
+    if (!property_get_bool("ro.somc.media_vibration.supported", false)) {
+        return;
+    }
+
+    const VolumeSource mediaVolSrc = toVolumeSource(AUDIO_STREAM_MUSIC, false);
+    bool isMediaVolSrc = (volumeSource != VOLUME_SOURCE_NONE) && (mediaVolSrc == volumeSource);
+
+    if (outputDesc != mPrimaryOutput || !isMediaVolSrc || !isHapticPlaybackSupported()) {
+        return;
+    }
+
+    float hapVolDb = 0.0f;
+    if (-758.0f < volumeDb) {
+        hapVolDb = expf(volumeDb * 0.115129f);
+    }
+    AudioParameter param;
+    const String8 key = String8("somc.media_vibration_audio_volume");
+    param.add(key, String8(std::to_string(hapVolDb).c_str()));
+    mpClientInterface->setParameters(AUDIO_IO_HANDLE_NONE, param.toString(), delayMs);
 }
 
 void AudioPolicyManager::setVoiceVolume(

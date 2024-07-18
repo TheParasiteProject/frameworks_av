@@ -582,6 +582,8 @@ protected:
                                            DeviceTypeSet deviceTypes,
                                            int delayMs = 0, bool force = false);
 
+        void setMediaHapticVolume(VolumeSource volumeSource, const sp<AudioOutputDescriptor>& outputDesc, float volumeDb, int delayMs);
+
         void setVoiceVolume(int index, IVolumeCurves &curves, bool isVoiceVolSrc, int delayMs);
 
         // returns true if the supplied set of volume source and devices are consistent with
