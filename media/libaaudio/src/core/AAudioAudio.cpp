@@ -295,11 +295,18 @@ AAUDIO_API aaudio_result_t  AAudioStreamBuilder_openStream(AAudioStreamBuilder* 
     if (result == AAUDIO_OK) {
         *streamPtr = (AAudioStream*) audioStream;
         id = audioStream->getId();
+        ALOGI("%s() got %s, devIds = [%s], perf = %s, burst = %d",
+              __func__,
+              (audioStream->isMMap() ? "MMAP" : "Legacy"),
+              android::toString(audioStream->getDeviceIds()).c_str(),
+              AudioGlobal_convertPerformanceModeToShortText(audioStream->getPerformanceMode()),
+              audioStream->getFramesPerBurst()
+              );
     } else {
         *streamPtr = nullptr;
     }
     ALOGI("%s() returns %d = %s for s#%u ----------------",
-        __func__, result, AAudio_convertResultToText(result), id);
+          __func__, result, AAudio_convertResultToText(result), id);
     return result;
 }
 
