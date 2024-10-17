@@ -656,7 +656,11 @@ sp<DeviceDescriptor> Engine::getDeviceForInputSource(audio_source_t inputSource)
         switch (commDeviceType) {
         case AUDIO_DEVICE_OUT_SPEAKER:
             device = availableDevices.getFirstExistingDevice({
+#ifdef PRIORITIZE_BUILTIN_OVER_BACK_MIC
+                    AUDIO_DEVICE_IN_BUILTIN_MIC, AUDIO_DEVICE_IN_BACK_MIC,
+#else
                     AUDIO_DEVICE_IN_BACK_MIC, AUDIO_DEVICE_IN_BUILTIN_MIC,
+#endif
                     AUDIO_DEVICE_IN_USB_DEVICE, AUDIO_DEVICE_IN_USB_HEADSET});
             break;
         case AUDIO_DEVICE_OUT_BLE_HEADSET:
@@ -714,7 +718,11 @@ sp<DeviceDescriptor> Engine::getDeviceForInputSource(audio_source_t inputSource)
     case AUDIO_SOURCE_CAMCORDER:
         // For a device without built-in mic, adding usb device
         device = availableDevices.getFirstExistingDevice({
+#ifdef PRIORITIZE_BUILTIN_OVER_BACK_MIC
+                AUDIO_DEVICE_IN_BUILTIN_MIC, AUDIO_DEVICE_IN_BACK_MIC,
+#else
                 AUDIO_DEVICE_IN_BACK_MIC, AUDIO_DEVICE_IN_BUILTIN_MIC,
+#endif
                 AUDIO_DEVICE_IN_USB_DEVICE});
         break;
     case AUDIO_SOURCE_VOICE_DOWNLINK:
