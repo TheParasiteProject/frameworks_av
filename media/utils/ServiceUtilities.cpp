@@ -169,6 +169,9 @@ static int checkRecordingInternal(const AttributionSourceState &attributionSourc
             return PERMISSION_HARD_DENIED;
         }
 
+        auto permission = source == AUDIO_SOURCE_REMOTE_SUBMIX ?
+                sModifyAudioRouting : sAndroidPermissionRecordAudio;
+
         permission::PermissionChecker permissionChecker;
         int permitted;
         if (start) {
@@ -182,21 +185,21 @@ static int checkRecordingInternal(const AttributionSourceState &attributionSourc
             //
             // TODO(b/294609684) To be removed when the pause state for an OP is removed.
             permitted = permissionChecker.checkPermissionForPreflightFromDatasource(
-                    sAndroidPermissionRecordAudio, resolvedAttributionSource.value(), msg,
+                    permission, resolvedAttributionSource.value(), msg,
                     attributedOpCode);
             if (permitted == PERMISSION_GRANTED) {
                 permitted = permissionChecker.checkPermissionForStartDataDeliveryFromDatasource(
-                        sAndroidPermissionRecordAudio, resolvedAttributionSource.value(), msg,
+                        permission, resolvedAttributionSource.value(), msg,
                         attributedOpCode);
             } else {
                 // intentionally don't set permitted
                 permissionChecker.checkPermissionForDataDeliveryFromDatasource(
-                            sAndroidPermissionRecordAudio, resolvedAttributionSource.value(), msg,
+                            permission, resolvedAttributionSource.value(), msg,
                             attributedOpCode);
             }
         } else {
             permitted = permissionChecker.checkPermissionForPreflightFromDatasource(
-                    sAndroidPermissionRecordAudio, resolvedAttributionSource.value(), msg,
+                    permission, resolvedAttributionSource.value(), msg,
                     attributedOpCode);
         }
 
