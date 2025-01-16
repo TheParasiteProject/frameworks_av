@@ -109,8 +109,9 @@ bool operator!= (const SortedVector<T> &left, const SortedVector<T> &right)
 // ----------------------------------------------------------------------------
 
 status_t AudioPolicyManager::setDeviceConnectionState(audio_policy_dev_state_t state,
-        const android::media::audio::common::AudioPort& port, audio_format_t encodedFormat) {
-    status_t status = setDeviceConnectionStateInt(state, port, encodedFormat);
+        const android::media::audio::common::AudioPort& port, audio_format_t encodedFormat,
+        bool deviceSwitch) {
+    status_t status = setDeviceConnectionStateInt(state, port, encodedFormat, deviceSwitch);
     nextAudioPortGeneration();
     return status;
 }
@@ -123,7 +124,7 @@ status_t AudioPolicyManager::setDeviceConnectionState(audio_devices_t device,
     media::AudioPortFw aidlPort;
     if (status_t status = deviceToAudioPort(device, device_address, device_name, &aidlPort);
         status == OK) {
-        return setDeviceConnectionState(state, aidlPort.hal, encodedFormat);
+        return setDeviceConnectionState(state, aidlPort.hal, encodedFormat, false /*deviceSwitch*/);
     } else {
         ALOGE("Failed to convert to AudioPort Parcelable: %s", statusToString(status).c_str());
         return status;
@@ -144,7 +145,7 @@ status_t AudioPolicyManager::broadcastDeviceConnectionState(const sp<DeviceDescr
 
 status_t AudioPolicyManager::setDeviceConnectionStateInt(
         audio_policy_dev_state_t state, const android::media::audio::common::AudioPort& port,
-        audio_format_t encodedFormat) {
+        audio_format_t encodedFormat, bool deviceSwitch) {
     if (port.ext.getTag() != AudioPortExt::device) {
         return BAD_VALUE;
     }
@@ -169,18 +170,19 @@ status_t AudioPolicyManager::setDeviceConnectionStateInt(
     if (state == AUDIO_POLICY_DEVICE_STATE_AVAILABLE) {
         device->setExtraAudioDescriptors(port.extraAudioDescriptors);
     }
-    return setDeviceConnectionStateInt(device, state);
+    return setDeviceConnectionStateInt(device, state, deviceSwitch);
 }
 
 status_t AudioPolicyManager::setDeviceConnectionStateInt(audio_devices_t deviceType,
                                                          audio_policy_dev_state_t state,
                                                          const char* device_address,
                                                          const char* device_name,
-                                                         audio_format_t encodedFormat) {
+                                                         audio_format_t encodedFormat,
+                                                         bool deviceSwitch) {
     media::AudioPortFw aidlPort;
     if (status_t status = deviceToAudioPort(deviceType, device_address, device_name, &aidlPort);
         status == OK) {
-        return setDeviceConnectionStateInt(state, aidlPort.hal, encodedFormat);
+        return setDeviceConnectionStateInt(state, aidlPort.hal, encodedFormat, deviceSwitch);
     } else {
         ALOGE("Failed to convert to AudioPort Parcelable: %s", statusToString(status).c_str());
         return status;
@@ -188,7 +190,8 @@ status_t AudioPolicyManager::setDeviceConnectionStateInt(audio_devices_t deviceT
 }
 
 status_t AudioPolicyManager::setDeviceConnectionStateInt(const sp<DeviceDescriptor> &device,
-                                                         audio_policy_dev_state_t state)
+                                                         audio_policy_dev_state_t state,
+                                                         bool deviceSwitch)
 {
     // handle output devices
     if (audio_is_output_device(device->type())) {
@@ -329,57 +332,59 @@ status_t AudioPolicyManager::setDeviceConnectionStateInt(const sp<DeviceDescript
             return false;
         };
 
-        if (doCheckForDeviceAndOutputChanges) {
+        if (doCheckForDeviceAndOutputChanges && !deviceSwitch) {
             checkForDeviceAndOutputChanges(checkCloseOutputs);
         } else {
             checkCloseOutputs();
         }
-        (void)updateCallRouting(false /*fromCache*/);
-        const DeviceVector msdOutDevices = getMsdAudioOutDevices();
-        const DeviceVector activeMediaDevices =
-                mEngine->getActiveMediaDevices(mAvailableOutputDevices);
-        std::map<audio_io_handle_t, DeviceVector> outputsToReopenWithDevices;
-        for (size_t i = 0; i < mOutputs.size(); i++) {
-            sp<SwAudioOutputDescriptor> desc = mOutputs.valueAt(i);
-            if (desc->isActive() && ((mEngine->getPhoneState() != AUDIO_MODE_IN_CALL) ||
-                (desc != mPrimaryOutput))) {
-                DeviceVector newDevices = getNewOutputDevices(desc, true /*fromCache*/);
-                // do not force device change on duplicated output because if device is 0, it will
-                // also force a device 0 for the two outputs it is duplicated to which may override
-                // a valid device selection on those outputs.
-                bool force = (msdOutDevices.isEmpty() || msdOutDevices != desc->devices())
-                        && !desc->isDuplicated()
-                        && (!device_distinguishes_on_address(device->type())
-                                // always force when disconnecting (a non-duplicated device)
-                                || (state == AUDIO_POLICY_DEVICE_STATE_UNAVAILABLE));
-                if (desc->mPreferredAttrInfo != nullptr && newDevices != desc->devices()) {
-                    // If the device is using preferred mixer attributes, the output need to reopen
-                    // with default configuration when the new selected devices are different from
-                    // current routing devices
-                    outputsToReopenWithDevices.emplace(mOutputs.keyAt(i), newDevices);
-                    continue;
+        if (!deviceSwitch) {
+            (void)updateCallRouting(false /*fromCache*/);
+            const DeviceVector msdOutDevices = getMsdAudioOutDevices();
+            const DeviceVector activeMediaDevices =
+                    mEngine->getActiveMediaDevices(mAvailableOutputDevices);
+            std::map<audio_io_handle_t, DeviceVector> outputsToReopenWithDevices;
+            for (size_t i = 0; i < mOutputs.size(); i++) {
+                sp<SwAudioOutputDescriptor> desc = mOutputs.valueAt(i);
+                if (desc->isActive() && ((mEngine->getPhoneState() != AUDIO_MODE_IN_CALL) ||
+                    (desc != mPrimaryOutput))) {
+                    DeviceVector newDevices = getNewOutputDevices(desc, true /*fromCache*/);
+                    // do not force device change on duplicated output because if device is 0,
+                    // it will also force a device 0 for the two outputs it is duplicated to
+                    // a valid device selection on those outputs.
+                    bool force = (msdOutDevices.isEmpty() || msdOutDevices != desc->devices())
+                            && !desc->isDuplicated()
+                            && (!device_distinguishes_on_address(device->type())
+                                    // always force when disconnecting (a non-duplicated device)
+                                    || (state == AUDIO_POLICY_DEVICE_STATE_UNAVAILABLE));
+                    if (desc->mPreferredAttrInfo != nullptr && newDevices != desc->devices()) {
+                        // If the device is using preferred mixer attributes, the output need to
+                        // reopen with default configuration when the new selected devices are
+                        // different from current routing devices
+                        outputsToReopenWithDevices.emplace(mOutputs.keyAt(i), newDevices);
+                        continue;
+                    }
+                    setOutputDevices(__func__, desc, newDevices, force, 0);
                 }
-                setOutputDevices(__func__, desc, newDevices, force, 0);
-            }
-            if (!desc->isDuplicated() && desc->mProfile->hasDynamicAudioProfile() &&
-                    !activeMediaDevices.empty() && desc->devices() != activeMediaDevices &&
-                    desc->supportsDevicesForPlayback(activeMediaDevices)) {
-                // Reopen the output to query the dynamic profiles when there is not active
-                // clients or all active clients will be rerouted. Otherwise, set the flag
-                // `mPendingReopenToQueryProfiles` in the SwOutputDescriptor so that the output
-                // can be reopened to query dynamic profiles when all clients are inactive.
-                if (areAllActiveTracksRerouted(desc)) {
-                    outputsToReopenWithDevices.emplace(mOutputs.keyAt(i), activeMediaDevices);
-                } else {
-                    desc->mPendingReopenToQueryProfiles = true;
+                if (!desc->isDuplicated() && desc->mProfile->hasDynamicAudioProfile() &&
+                        !activeMediaDevices.empty() && desc->devices() != activeMediaDevices &&
+                        desc->supportsDevicesForPlayback(activeMediaDevices)) {
+                    // Reopen the output to query the dynamic profiles when there is not active
+                    // clients or all active clients will be rerouted. Otherwise, set the flag
+                    // `mPendingReopenToQueryProfiles` in the SwOutputDescriptor so that the output
+                    // can be reopened to query dynamic profiles when all clients are inactive.
+                    if (areAllActiveTracksRerouted(desc)) {
+                        outputsToReopenWithDevices.emplace(mOutputs.keyAt(i), activeMediaDevices);
+                    } else {
+                        desc->mPendingReopenToQueryProfiles = true;
+                    }
+                }
+                if (!desc->supportsDevicesForPlayback(activeMediaDevices)) {
+                    // Clear the flag that previously set for re-querying profiles.
+                    desc->mPendingReopenToQueryProfiles = false;
                 }
             }
-            if (!desc->supportsDevicesForPlayback(activeMediaDevices)) {
-                // Clear the flag that previously set for re-querying profiles.
-                desc->mPendingReopenToQueryProfiles = false;
-            }
+            reopenOutputsWithDevices(outputsToReopenWithDevices);
         }
-        reopenOutputsWithDevices(outputsToReopenWithDevices);
 
         if (state == AUDIO_POLICY_DEVICE_STATE_UNAVAILABLE) {
             cleanUpForDevice(device);
@@ -469,19 +474,22 @@ status_t AudioPolicyManager::setDeviceConnectionStateInt(const sp<DeviceDescript
             return BAD_VALUE;
         }
 
-        checkCloseInputs();
-        // As the input device list can impact the output device selection, update
-        // getDeviceForStrategy() cache
-        updateDevicesAndOutputs();
+        if (!deviceSwitch) {
+            checkCloseInputs();
+            // As the input device list can impact the output device selection, update
+            // getDeviceForStrategy() cache
+            updateDevicesAndOutputs();
 
-        (void)updateCallRouting(false /*fromCache*/);
-        // Reconnect Audio Source
-        for (const auto &strategy : mEngine->getOrderedProductStrategies()) {
-            auto attributes = mEngine->getAllAttributesForProductStrategy(strategy).front();
-            checkAudioSourceForAttributes(attributes);
-        }
-        if (state == AUDIO_POLICY_DEVICE_STATE_UNAVAILABLE) {
-            cleanUpForDevice(device);
+            (void)updateCallRouting(false /*fromCache*/);
+            // Reconnect Audio Source
+            for (const auto &strategy : mEngine->getOrderedProductStrategies()) {
+                auto attributes = mEngine->getAllAttributesForProductStrategy(strategy).front();
+                checkAudioSourceForAttributes(attributes);
+            }
+
+            if (state == AUDIO_POLICY_DEVICE_STATE_UNAVAILABLE) {
+                cleanUpForDevice(device);
+            }
         }
 
         mpClientInterface->onAudioPortListUpdate();

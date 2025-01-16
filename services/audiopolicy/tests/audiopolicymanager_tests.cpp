@@ -2653,7 +2653,7 @@ TEST_P(AudioPolicyManagerTestDeviceConnection, PassingExtraAudioDescriptors) {
     const size_t lastConnectedDevicePortCount = mClient->getConnectedDevicePortCount();
     const size_t lastDisconnectedDevicePortCount = mClient->getDisconnectedDevicePortCount();
     EXPECT_EQ(NO_ERROR, mManager->setDeviceConnectionState(
-                    AUDIO_POLICY_DEVICE_STATE_AVAILABLE, port, AUDIO_FORMAT_DEFAULT));
+                    AUDIO_POLICY_DEVICE_STATE_AVAILABLE, port, AUDIO_FORMAT_DEFAULT, false));
     EXPECT_EQ(lastConnectedDevicePortCount + 1, mClient->getConnectedDevicePortCount());
     EXPECT_EQ(lastDisconnectedDevicePortCount, mClient->getDisconnectedDevicePortCount());
     const audio_port_v7* devicePort = mClient->getLastConnectedDevicePort();
