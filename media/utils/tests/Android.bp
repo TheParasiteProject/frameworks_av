@@ -285,5 +285,6 @@ cc_test {
     defaults: ["libmediautils_tests_defaults"],
     srcs: [
         "jthread_tests.cpp",
+        "runnable_tests.cpp",
     ],
 }
