@@ -41,6 +41,7 @@
 #include <Serializer.h>
 #include <android/media/audio/common/AudioMMapPolicy.h>
 #include <android/media/audio/common/AudioPort.h>
+#include <android_media_audio.h>
 #include <com_android_media_audio.h>
 #include <android_media_audiopolicy.h>
 #include <com_android_media_audioserver.h>
@@ -8682,12 +8683,14 @@ status_t AudioPolicyManager::checkAndSetVolume(IVolumeCurves &curves,
 
     float volumeDb = computeVolume(curves, volumeSource, index, deviceTypes);
     const VolumeSource dtmfVolSrc = toVolumeSource(AUDIO_STREAM_DTMF, false);
-    if (outputDesc->isFixedVolume(deviceTypes) ||
-            // Force VoIP volume to max for bluetooth SCO/BLE device except if muted
-            (index != 0 && (isVoiceVolSrc || isBtScoVolSrc
-                        || (isInCall() && (dtmfVolSrc == volumeSource))) &&
-                    (isSingleDeviceType(deviceTypes, audio_is_bluetooth_out_sco_device)
-                    || isSingleDeviceType(deviceTypes, audio_is_ble_out_device)))) {
+    // Force VoIP volume to max for bluetooth SCO/BLE device except if muted
+    bool isAbsVolumeType = !android_media_audio_unify_absolute_volume_management()
+            && (index != 0
+            && (isVoiceVolSrc || isBtScoVolSrc || (isInCall() && (dtmfVolSrc == volumeSource)))
+            && (isSingleDeviceType(deviceTypes, audio_is_bluetooth_out_sco_device)
+                    || isSingleDeviceType(deviceTypes, audio_is_ble_out_device)));
+
+    if (outputDesc->isFixedVolume(deviceTypes) || isAbsVolumeType) {
         volumeDb = 0.0f;
     }
 
