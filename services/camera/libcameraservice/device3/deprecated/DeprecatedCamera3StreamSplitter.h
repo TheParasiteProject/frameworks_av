@@ -21,7 +21,6 @@
 
 #include <camera/CameraMetadata.h>
 
-#include <gui/BufferItemConsumer.h>
 #include <gui/IConsumerListener.h>
 #include <gui/Surface.h>
 
@@ -248,7 +247,6 @@ class DeprecatedCamera3StreamSplitter : public IConsumerListener {
 
     sp<IGraphicBufferProducer> mProducer;
     sp<IGraphicBufferConsumer> mConsumer;
-    sp<BufferItemConsumer> mBufferItemConsumer;
     sp<Surface> mSurface;
 
     // Map graphic buffer ids -> buffer items
