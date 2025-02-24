@@ -762,7 +762,7 @@ class MediaCodec::ReleaseSurface {
 public:
     explicit ReleaseSurface(uint64_t usage) {
         BufferQueue::createBufferQueue(&mProducer, &mConsumer);
-        mSurface = new Surface(mProducer, false /* controlledByApp */);
+        mSurface = sp<Surface>::make(mProducer, false /* controlledByApp */);
         struct ConsumerListener : public IConsumerListener {
             ConsumerListener(const sp<IGraphicBufferConsumer> &consumer) {
                 mConsumer = consumer;
