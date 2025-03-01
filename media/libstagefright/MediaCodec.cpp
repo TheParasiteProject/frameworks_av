@@ -820,6 +820,7 @@ enum {
     kWhatFirstTunnelFrameReady = 'ftfR',
     kWhatPollForRenderedBuffers = 'plrb',
     kWhatMetricsUpdated      = 'mtru',
+    kWhatRequiredResourcesChanged = 'reqR',
 };
 
 class CryptoAsyncCallback : public CryptoAsync::CryptoAsyncCallback {
@@ -967,6 +968,7 @@ public:
     virtual void onOutputBuffersChanged() override;
     virtual void onFirstTunnelFrameReady() override;
     virtual void onMetricsUpdated(const sp<AMessage> &updatedMetrics) override;
+    virtual void onRequiredResourcesChanged() override;
 private:
     const sp<AMessage> mNotify;
 };
@@ -1100,6 +1102,12 @@ void CodecCallback::onMetricsUpdated(const sp<AMessage> &updatedMetrics) {
     notify->post();
 }
 
+void CodecCallback::onRequiredResourcesChanged() {
+    sp<AMessage> notify(mNotify->dup());
+    notify->setInt32("what", kWhatRequiredResourcesChanged);
+    notify->post();
+}
+
 static MediaResourceSubType toMediaResourceSubType(bool isHardware, MediaCodec::Domain domain) {
     switch (domain) {
     case MediaCodec::DOMAIN_VIDEO:
@@ -1217,6 +1225,111 @@ inline MediaResourceType getResourceType(const std::string& resourceName) {
 
     ALOGE("Resource ID missing in resource Name: [%s]!", resourceName.c_str());
     return MediaResourceType::kUnspecified;
+}
+
+/**
+ * Get the float/integer value associated with the given key.
+ *
+ * If no such key is found, it will return false without updating
+ * the value.
+ */
+static bool getValueFor(const sp<AMessage>& msg,
+                        const char* key,
+                        float* value) {
+    if (msg->findFloat(key, value)) {
+        return true;
+    }
+
+    int32_t intValue = 0;
+    if (msg->findInt32(key, &intValue)) {
+        *value = (float)intValue;
+        return true;
+    }
+
+    return false;
+}
+
+/*
+ * Use operating frame rate for per frame resource calculation as below:
+ * - Check if operating-rate is available. If so, use it.
+ * - If its encoder and if we have capture-rate, use that as frame rate.
+ * - Else, check if frame-rate is available. If so, use it.
+ * - Else, use the default value.
+ *
+ * NOTE: This function is called with format that could be:
+ *   - format used to configure the codec
+ *   - codec's input format
+ *   - codec's output format
+ *
+ * Some of the key's may not be present in either input or output format or
+ * both.
+ * For example, "capture-rate", this is currently only used in configure format.
+ *
+ * For encoders, in rare cases, we would expect "operating-rate" to be set
+ * for high-speed capture and it's only used during configuration.
+ */
+static float getOperatingFrameRate(const sp<AMessage>& format,
+                                   float defaultFrameRate,
+                                   bool isEncoder) {
+    float operatingRate = 0;
+    if (getValueFor(format, "operating-rate", &operatingRate)) {
+        // Use operating rate to convert per-frame resources into a whole.
+        return operatingRate;
+    }
+
+    float captureRate = 0;
+    if (isEncoder && getValueFor(format, "capture-rate", &captureRate)) {
+        // Use capture rate to convert per-frame resources into a whole.
+        return captureRate;
+    }
+
+    // Otherwise use frame-rate (or fallback to the default framerate passed)
+    float frameRate = defaultFrameRate;
+    getValueFor(format, "frame-rate", &frameRate);
+    return frameRate;
+}
+
+bool MediaCodec::getRequiredSystemResources() {
+    if (android::media::codec::codec_availability() &&
+        android::media::codec::codec_availability_support()) {
+        // Get the required system resources now.
+        Mutexed<std::vector<InstanceResourceInfo>>::Locked resourcesLocked(
+                mRequiredResourceInfo);
+        *resourcesLocked = mCodec->getRequiredSystemResources();
+        // Update the dynamic resource usage with the current operating frame-rate.
+        *resourcesLocked = computeDynamicResources(*resourcesLocked);
+
+        return !(*resourcesLocked).empty();
+    }
+
+    return false;
+}
+
+/**
+ * Convert per frame/input/output resources into static_count
+ *
+ * TODO: (girishshetty): In the future, change InstanceResourceInfo to hold:
+ * - resource type (const, per frame, per input/output)
+ * - resource count
+ */
+std::vector<InstanceResourceInfo> MediaCodec::computeDynamicResources(
+        const std::vector<InstanceResourceInfo>& inResources) {
+    std::vector<InstanceResourceInfo> dynamicResources;
+    for (const InstanceResourceInfo& resource : inResources) {
+        // If mStaticCount isn't 0, nothing to be changed because effectively this is a union.
+        if (resource.mStaticCount != 0) {
+            dynamicResources.push_back(resource);
+            continue;
+        }
+        if (resource.mPerFrameCount != 0) {
+            uint64_t staticCount = resource.mPerFrameCount * mFrameRate;
+            // We are tracking everything as static count here. So set per frame count to 0.
+            dynamicResources.emplace_back(resource.mName, staticCount, 0);
+        }
+        // TODO: (girishshetty): Add per input/output resource conversion here.
+    }
+
+    return dynamicResources;
 }
 
 //static
@@ -2596,6 +2709,14 @@ status_t MediaCodec::configure(
 
     sp<AMessage> callback = mCallback;
 
+    if (mDomain == DOMAIN_VIDEO) {
+        // Use format to compute initial operating frame rate.
+        // After the successful configuration (and also possibly when output
+        // format change notification), this value will be recalculated.
+        bool isEncoder = (flags & CONFIGURE_FLAG_ENCODE);
+        mFrameRate = getOperatingFrameRate(format, mFrameRate, isEncoder);
+    }
+
     std::vector<MediaResourceParcel> resources;
     resources.push_back(MediaResource::CodecResource(mFlags & kFlagIsSecure,
             toMediaResourceSubType(mIsHardware, mDomain)));
@@ -2654,9 +2775,8 @@ status_t MediaCodec::getRequiredResources(std::vector<InstanceResourceInfo>& res
     }
 
     Mutexed<std::vector<InstanceResourceInfo>>::Locked resourcesLocked(mRequiredResourceInfo);
-    std::vector<InstanceResourceInfo>& requiredResourceInfo = *resourcesLocked;
-    if (!requiredResourceInfo.empty()) {
-        resources = requiredResourceInfo;
+    if (!(*resourcesLocked).empty()) {
+        resources = *resourcesLocked;
         return OK;
     }
 
@@ -4425,13 +4545,11 @@ void MediaCodec::onMessageReceived(const sp<AMessage> &msg) {
                         mFlags |= kFlagUsesSoftwareRenderer;
                     }
 
-                    if (android::media::codec::codec_availability() &&
-                        android::media::codec::codec_availability_support()) {
-                        // Get the required system resources now.
-                        Mutexed<std::vector<InstanceResourceInfo>>::Locked resourcesLocked(
-                                mRequiredResourceInfo);
-                        *resourcesLocked = mCodec->getRequiredSystemResources();
-                    }
+                    // Use input and output formats to get operating frame-rate.
+                    bool isEncoder = mFlags & kFlagIsEncoder;
+                    mFrameRate = getOperatingFrameRate(mInputFormat, mFrameRate, isEncoder);
+                    mFrameRate = getOperatingFrameRate(mOutputFormat, mFrameRate, isEncoder);
+                    getRequiredSystemResources();
 
                     setState(CONFIGURED);
                     postPendingRepliesAndDeferredMessages("kWhatComponentConfigured");
@@ -4582,8 +4700,7 @@ void MediaCodec::onMessageReceived(const sp<AMessage> &msg) {
                         android::media::codec::codec_availability_support()) {
                         Mutexed<std::vector<InstanceResourceInfo>>::Locked resourcesLocked(
                                 mRequiredResourceInfo);
-                        std::vector<InstanceResourceInfo>& requiredResourceInfo = *resourcesLocked;
-                        for (const InstanceResourceInfo& resource : requiredResourceInfo) {
+                        for (const InstanceResourceInfo& resource : *resourcesLocked) {
                             resources.push_back(getMediaResourceParcel(resource));
                         }
                     }
@@ -4868,6 +4985,16 @@ void MediaCodec::onMessageReceived(const sp<AMessage> &msg) {
                     break;
                 }
 
+                case kWhatRequiredResourcesChanged:
+                {
+                    // Get the updated required system resources.
+                    if (getRequiredSystemResources()) {
+                        onRequiredResourcesChanged();
+                    }
+
+                    break;
+                }
+
                 case kWhatEOS:
                 {
                     // We already notify the client of this by using the
@@ -4893,8 +5020,7 @@ void MediaCodec::onMessageReceived(const sp<AMessage> &msg) {
                         android::media::codec::codec_availability_support()) {
                         Mutexed<std::vector<InstanceResourceInfo>>::Locked resourcesLocked(
                                 mRequiredResourceInfo);
-                        std::vector<InstanceResourceInfo>& requiredResourceInfo = *resourcesLocked;
-                        for (const InstanceResourceInfo& resource : requiredResourceInfo) {
+                        for (const InstanceResourceInfo& resource : *resourcesLocked) {
                             resources.push_back(getMediaResourceParcel(resource));
                         }
                     }
@@ -6137,12 +6263,24 @@ void MediaCodec::handleOutputFormatChangeIfNeeded(const sp<MediaCodecBuffer> &bu
     // Update the width and the height.
     int32_t left = 0, top = 0, right = 0, bottom = 0, width = 0, height = 0;
     bool newSubsession = false;
-    if (android::media::codec::provider_->subsession_metrics()
-            && mOutputFormat->findInt32("width", &width)
-            && mOutputFormat->findInt32("height", &height)
-            && (width != mWidth || height != mHeight)) {
-        // consider a new subsession if the width or height changes.
-        newSubsession = true;
+    if (android::media::codec::provider_->subsession_metrics()) {
+        // consider a new subsession if the actual video size changes
+        // TODO: if the resolution of the clip changes "mid-stream" and crop params did not change
+        // or changed in such a way that the actual video size did not change then new subsession is
+        // not detected.
+        // TODO: although rare, the buffer attributes (rect(...), width, height) need not be a true
+        // representation of actual stream attributes (rect(...), width, height). It is only
+        // required that actual video frame is correctly presented in the rect() region of the
+        // buffer making this approach of detecting subsession less reliable.
+        if (mOutputFormat->findRect("crop", &left, &top, &right, &bottom)) {
+            if ((right - left + 1) != mWidth || (bottom - top + 1) != mHeight) {
+                newSubsession = true;
+            }
+        } else if (mOutputFormat->findInt32("width", &width) &&
+                   mOutputFormat->findInt32("height", &height) &&
+                   (width != mWidth || height != mHeight)) {
+            newSubsession = true;
+        }
     }
     // TODO: properly detect new audio subsession
 
@@ -6182,6 +6320,21 @@ void MediaCodec::handleOutputFormatChangeIfNeeded(const sp<MediaCodecBuffer> &bu
     }
 
     updateHdrMetrics(false /* isConfig */);
+
+    if (mDomain == DOMAIN_VIDEO) {
+        bool isEncoder = mFlags & kFlagIsEncoder;
+        // Since the output format has changed, see if we need to update
+        // operating frame-rate.
+        float frameRate = getOperatingFrameRate(mOutputFormat, mFrameRate, isEncoder);
+        // if the operating frame-rate has changed, we need to recalibrate the
+        // required system resources again and notify the caller.
+        if (frameRate != mFrameRate) {
+            mFrameRate = frameRate;
+            if (getRequiredSystemResources()) {
+                onRequiredResourcesChanged();
+            }
+        }
+    }
 }
 
 // always called from the looper thread (and therefore not mutexed)
@@ -7219,17 +7372,8 @@ void MediaCodec::onOutputFormatChanged() {
     }
 }
 
-void MediaCodec::onRequiredResourcesChanged(
-        const std::vector<InstanceResourceInfo>& resourceInfo) {
-    bool canIssueCallback = false;
-    if (android::media::codec::codec_availability() &&
-        android::media::codec::codec_availability_support()) {
-        Mutexed<std::vector<InstanceResourceInfo>>::Locked resourcesLocked(mRequiredResourceInfo);
-        *resourcesLocked = resourceInfo;
-        canIssueCallback = true;
-    }
-    // Make sure codec availability feature is on.
-    if (mCallback != nullptr && canIssueCallback) {
+void MediaCodec::onRequiredResourcesChanged() {
+    if (mCallback != nullptr) {
         // Post the callback
         sp<AMessage> msg = mCallback->dup();
         msg->setInt32("callbackID", CB_REQUIRED_RESOURCES_CHANGED);
