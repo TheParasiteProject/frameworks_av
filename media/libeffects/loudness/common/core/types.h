@@ -13,12 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef LE_FX_ENGINE_DSP_CORE_INTERPOLATION_H_
-#define LE_FX_ENGINE_DSP_CORE_INTERPOLATION_H_
 
-#include "common/core/math.h"
-#include "dsp/core/interpolator_base.h"
-#include "dsp/core/interpolator_linear.h"
+#ifndef LE_FX_ENGINE_COMMON_CORE_TYPES_H_
+#define LE_FX_ENGINE_COMMON_CORE_TYPES_H_
 
-#endif  // LE_FX_ENGINE_DSP_CORE_INTERPOLATION_H_
+#include "common/core/os.h"
 
+#include "common/core/basic_types.h"
+
+#ifndef LE_FX_DISALLOW_COPY_AND_ASSIGN
+#define LE_FX_DISALLOW_COPY_AND_ASSIGN(TypeName) \
+  TypeName(const TypeName&); \
+  void operator=(const TypeName&)
+#endif  // LE_FX_DISALLOW_COPY_AND_ASSIGN
+
+
+#endif  // LE_FX_ENGINE_COMMON_CORE_TYPES_H_

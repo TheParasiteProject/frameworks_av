@@ -44,9 +44,10 @@ RetCode LoudnessEnhancerContext::disable() {
 }
 
 RetCode LoudnessEnhancerContext::setLeGain(int gainMb) {
+    float targetAmp = pow(10, gainMb / 2000.0f);  // mB to linear amplification
     if (mCompressor != nullptr) {
-        const float targetAmp = pow(10, gainMb / 2000.f);  // mB to linear amplification
-        mCompressor->set_target_gain(targetAmp);
+        // Get samplingRate from input
+        mCompressor->Initialize(targetAmp, mCommon.input.base.sampleRate);
     }
     mGain = gainMb;
     return RetCode::SUCCESS;
