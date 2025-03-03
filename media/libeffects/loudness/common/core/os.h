@@ -13,12 +13,17 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef LE_FX_ENGINE_DSP_CORE_INTERPOLATION_H_
-#define LE_FX_ENGINE_DSP_CORE_INTERPOLATION_H_
 
-#include "common/core/math.h"
-#include "dsp/core/interpolator_base.h"
-#include "dsp/core/interpolator_linear.h"
+#ifndef LE_FX_ENGINE_COMMON_CORE_OS_H_
+#define LE_FX_ENGINE_COMMON_CORE_OS_H_
 
-#endif  // LE_FX_ENGINE_DSP_CORE_INTERPOLATION_H_
+// -----------------------------------------------------------------------------
+// OS Identification:
+// -----------------------------------------------------------------------------
 
+#define LE_FX_OS_UNIX
+#if defined(__ANDROID__)
+#    define LE_FX_OS_ANDROID
+#endif  // Android
+
+#endif // LE_FX_ENGINE_COMMON_CORE_OS_H_

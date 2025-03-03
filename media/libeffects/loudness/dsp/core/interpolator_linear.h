@@ -36,36 +36,43 @@ namespace sigmod {
 template <typename T>
 class InterpolatorLinear: public InterpolatorBase<T, InterpolatorLinear<T> > {
  public:
-  InterpolatorLinear() = default;
-  InterpolatorLinear(const InterpolatorLinear&) = delete;
-  InterpolatorLinear& operator=(const InterpolatorLinear&) = delete;
+  InterpolatorLinear() { }
+  ~InterpolatorLinear() { }
 
  protected:
   // Provides the main implementation of the linear interpolation algorithm.
   // Assumes that: X[cached_index_] < x < X[cached_index_ + 1]
-
-  T MethodSpecificInterpolation(T x) {
-      const T dX = x_data_[cached_index_ + 1] - x_data_[cached_index_];
-      const T dY = y_data_[cached_index_ + 1] - y_data_[cached_index_];
-      const T dx = x - x_data_[cached_index_];
-      return y_data_[cached_index_] + (dY * dx) / dX;
-  }
+  T MethodSpecificInterpolation(T x);
 
   // Pre-compute internal state_ parameters.
-  bool SetInternalState() {
-      state_ = nullptr;
-      return true;
-  }
+  bool SetInternalState();
+
  private:
-  friend class InterpolatorBase<T, InterpolatorLinear<T>>;
-  typedef InterpolatorBase<T, InterpolatorLinear<T>> BaseClass;
+  friend class InterpolatorBase<T, InterpolatorLinear<T> >;
+  typedef InterpolatorBase<T, InterpolatorLinear<T> > BaseClass;
   using BaseClass::status_;
   using BaseClass::cached_index_;
   using BaseClass::x_data_;
   using BaseClass::y_data_;
   using BaseClass::data_length_;
   using BaseClass::state_;
+
+  LE_FX_DISALLOW_COPY_AND_ASSIGN(InterpolatorLinear<T>);
 };
+
+template <typename T>
+inline T InterpolatorLinear<T>::MethodSpecificInterpolation(T x) {
+  T dX = x_data_[cached_index_ + 1] - x_data_[cached_index_];
+  T dY = y_data_[cached_index_ + 1] - y_data_[cached_index_];
+  T dx = x - x_data_[cached_index_];
+  return y_data_[cached_index_] + (dY * dx) / dX;
+}
+
+template <typename T>
+bool InterpolatorLinear<T>::SetInternalState() {
+  state_ = NULL;
+  return true;
+}
 
 }  // namespace sigmod
 
