@@ -172,9 +172,20 @@ static int checkRecordingInternal(const AttributionSourceState &attributionSourc
         permission::PermissionChecker permissionChecker;
         int permitted;
         if (start) {
-            permitted = permissionChecker.checkPermissionForStartDataDeliveryFromDatasource(
+            // Do a double-check, where we first check without actually starting in order to handle
+            // the behavior of AppOps where ops are sometimes started but paused for SOFT_DENIED.
+            // Since there is no way to maintain reference consensus due to this behavior, avoid
+            // starting an op when a restriction is in place by first checking. Technically racy,
+            // but very unlikely.
+            // TODO(b/294609684) To be removed when the pause state for an OP is removed.
+            permitted = permissionChecker.checkPermissionForPreflightFromDatasource(
                     sAndroidPermissionRecordAudio, resolvedAttributionSource.value(), msg,
                     attributedOpCode);
+            if (permitted == PERMISSION_GRANTED) {
+                permitted = permissionChecker.checkPermissionForStartDataDeliveryFromDatasource(
+                        sAndroidPermissionRecordAudio, resolvedAttributionSource.value(), msg,
+                        attributedOpCode);
+            }
         } else {
             permitted = permissionChecker.checkPermissionForPreflightFromDatasource(
                     sAndroidPermissionRecordAudio, resolvedAttributionSource.value(), msg,
