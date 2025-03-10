@@ -8162,6 +8162,7 @@ uint32_t AudioPolicyManager::setOutputDevices(const char *caller,
               devices.toString().c_str());
         // restore previous device after evaluating strategy mute state
         outputDesc->setDevices(prevDevices);
+        applyStreamVolumes(outputDesc, prevDevices.types(), delayMs, true /*force*/);
         return muteWaitMs;
     }
 
