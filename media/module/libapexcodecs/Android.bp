@@ -20,6 +20,11 @@ package {
 
 cc_defaults {
     name: "libcom.android.media.swcodec.apexcodecs-defaults",
+
+    defaults: [
+        "libcodec2-internal-defaults",
+    ],
+
     header_libs: [
         "libbase_headers",
     ],
@@ -28,7 +33,6 @@ cc_defaults {
 
     shared_libs: [
         "libbase",
-        "libcodec2",
         "libnativewindow",
     ],
 
@@ -42,7 +46,6 @@ cc_defaults {
 
     export_shared_lib_headers: [
         "libbase",
-        "libcodec2",
         "libnativewindow",
     ],
 
