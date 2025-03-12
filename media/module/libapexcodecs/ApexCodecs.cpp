@@ -140,6 +140,18 @@ struct ApexCodec_Component {
         return mConfigurable.get();
     }
 
+    ApexCodec_Status process(
+            const ApexCodec_Buffer *input,
+            ApexCodec_Buffer *output,
+            size_t *consumed,
+            size_t *produced) {
+        if (input == nullptr || output == nullptr || consumed == nullptr || produced == nullptr) {
+            return APEXCODEC_STATUS_BAD_VALUE;
+        }
+        return mComponent->process(input, output, consumed, produced);
+    }
+
+
 private:
     std::unique_ptr<ApexComponentIntf> mComponent;
     std::unique_ptr<ApexCodec_Configurable> mConfigurable;
@@ -744,7 +756,10 @@ ApexCodec_Status ApexCodec_Component_process(
         ApexCodec_Buffer *output,
         size_t *consumed,
         size_t *produced) {
-    return APEXCODEC_STATUS_OMITTED;
+    if (comp == nullptr) {
+        return APEXCODEC_STATUS_BAD_VALUE;
+    }
+    return comp->process(input, output, consumed, produced);
 }
 
 ApexCodec_Status ApexCodec_Configurable::config(
