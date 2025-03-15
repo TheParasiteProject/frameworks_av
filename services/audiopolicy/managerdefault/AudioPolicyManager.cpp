@@ -2622,8 +2622,15 @@ status_t AudioPolicyManager::startSource(const sp<SwAudioOutputDescriptor>& outp
                 // a volume ramp if there is no mute.
                 requiresMuteCheck |= sharedDevice && isActive;
 
-                if (needToCloseBitPerfectOutput && desc->isBitPerfect()) {
-                    outputsToReopen.push_back(desc);
+                if (desc->isBitPerfect()) {
+                    if (needToCloseBitPerfectOutput) {
+                        outputsToReopen.push_back(desc);
+                    } else if (!desc->devices().filter(devices).isEmpty()) {
+                        // There is an active bit-perfect playback on one of the targeted device,
+                        // the client should be reattached to the bit-perfect thread.
+                        ALOGD("%s, fails as there is bit-perfect playback active", __func__);
+                        return DEAD_OBJECT;
+                    }
                 }
             }
         }
@@ -8193,6 +8200,7 @@ uint32_t AudioPolicyManager::setOutputDevices(const char *caller,
               devices.toString().c_str());
         // restore previous device after evaluating strategy mute state
         outputDesc->setDevices(prevDevices);
+        applyStreamVolumes(outputDesc, prevDevices.types(), delayMs, true /*force*/);
         return muteWaitMs;
     }
 
