@@ -14,18 +14,86 @@
  * limitations under the License.
  */
 
+#define LOG_TAG "ApexCodecs"
+// #define LOG_NDEBUG 0
+#include <android-base/logging.h>
+
 #include <new>
+
+#include <android_media_swcodec_flags.h>
 
 #include <android-base/no_destructor.h>
 #include <apex/ApexCodecs.h>
+#include <apex/ApexCodecsImpl.h>
 #include <apex/ApexCodecsParam.h>
 
 // TODO: remove when we have real implementations
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-parameter"
 
+using ::android::apexcodecs::ApexComponentIntf;
+using ::android::apexcodecs::ApexComponentStoreIntf;
+using ::android::base::ERROR;
+
+struct ApexCodec_Component {
+    explicit ApexCodec_Component(std::unique_ptr<ApexComponentIntf> &&comp)
+        : mComponent(std::move(comp)) {
+    }
+
+    ApexCodec_Status start() {
+        return mComponent->start();
+    }
+
+    ApexCodec_Status flush() {
+        return mComponent->flush();
+    }
+
+    ApexCodec_Status reset() {
+        return mComponent->reset();
+    }
+
+private:
+    std::unique_ptr<ApexComponentIntf> mComponent;
+};
+
 struct ApexCodec_ComponentStore {
-    ApexCodec_ComponentStore() = default;
+    ApexCodec_ComponentStore() : mStore((ApexComponentStoreIntf *)GetApexComponentStore()) {
+        if (mStore == nullptr) {
+            return;
+        }
+        mC2Traits = mStore->listComponents();
+        mTraits.reserve(mC2Traits.size());
+        for (const std::shared_ptr<const C2Component::Traits> &trait : mC2Traits) {
+            mTraits.push_back(ApexCodec_ComponentTraits{
+                trait->name.c_str(),                // name
+                trait->mediaType.c_str(),           // mediaType
+                (ApexCodec_Kind)trait->kind,        // kind
+                (ApexCodec_Domain)trait->domain,    // domain
+            });
+        }
+    }
+
+    ApexCodec_ComponentTraits *getTraits(size_t index) {
+        if (mStore == nullptr) {
+            return nullptr;
+        }
+        if (index < mTraits.size()) {
+            return mTraits.data() + index;
+        } else {
+            return nullptr;
+        }
+    }
+
+    std::unique_ptr<ApexComponentIntf> createComponent(const char *name) {
+        if (mStore == nullptr) {
+            return nullptr;
+        }
+        return mStore->createComponent(name);
+    }
+private:
+    ApexComponentStoreIntf *mStore;
+    std::vector<std::shared_ptr<const C2Component::Traits>> mC2Traits;
+    std::vector<ApexCodec_ComponentTraits> mTraits;
 };
 
 ApexCodec_ComponentStore *ApexCodec_GetComponentStore() {
@@ -35,27 +103,61 @@ ApexCodec_ComponentStore *ApexCodec_GetComponentStore() {
 
 ApexCodec_ComponentTraits *ApexCodec_Traits_get(
         ApexCodec_ComponentStore *store, size_t index) {
-    return nullptr;
+    if (!android::media::swcodec::flags::apexcodecs_base()) {
+        return nullptr;
+    }
+    return store->getTraits(index);
 }
 
 ApexCodec_Status ApexCodec_Component_create(
         ApexCodec_ComponentStore *store, const char *name, ApexCodec_Component **comp) {
+    if (!android::media::swcodec::flags::apexcodecs_base()) {
+        return APEXCODEC_STATUS_NOT_FOUND;
+    }
+    if (store == nullptr) {
+        LOG(ERROR) << "ApexCodec_Component_create: store is nullptr";
+        return APEXCODEC_STATUS_BAD_VALUE;
+    }
+    if (name == nullptr) {
+        LOG(ERROR) << "ApexCodec_Component_create: name is nullptr";
+        return APEXCODEC_STATUS_BAD_VALUE;
+    }
+    if (comp == nullptr) {
+        LOG(ERROR) << "ApexCodec_Component_create: comp is nullptr";
+        return APEXCODEC_STATUS_BAD_VALUE;
+    }
     *comp = nullptr;
-    return APEXCODEC_STATUS_NOT_FOUND;
+    std::unique_ptr<ApexComponentIntf> compIntf = store->createComponent(name);
+    if (compIntf == nullptr) {
+        return APEXCODEC_STATUS_NOT_FOUND;
+    }
+    *comp = new ApexCodec_Component(std::move(compIntf));
+    return APEXCODEC_STATUS_OK;
 }
 
-void ApexCodec_Component_destroy(ApexCodec_Component *comp) {}
+void ApexCodec_Component_destroy(ApexCodec_Component *comp) {
+    delete comp;
+}
 
 ApexCodec_Status ApexCodec_Component_start(ApexCodec_Component *comp) {
-    return APEXCODEC_STATUS_OMITTED;
+    if (comp == nullptr) {
+        return APEXCODEC_STATUS_BAD_VALUE;
+    }
+    return comp->start();
 }
 
 ApexCodec_Status ApexCodec_Component_flush(ApexCodec_Component *comp) {
-    return APEXCODEC_STATUS_OMITTED;
+    if (comp == nullptr) {
+        return APEXCODEC_STATUS_BAD_VALUE;
+    }
+    return comp->flush();
 }
 
 ApexCodec_Status ApexCodec_Component_reset(ApexCodec_Component *comp) {
-    return APEXCODEC_STATUS_OMITTED;
+    if (comp == nullptr) {
+        return APEXCODEC_STATUS_BAD_VALUE;
+    }
+    return comp->reset();
 }
 
 ApexCodec_Configurable *ApexCodec_Component_getConfigurable(
