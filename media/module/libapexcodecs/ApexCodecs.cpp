@@ -165,16 +165,148 @@ ApexCodec_Configurable *ApexCodec_Component_getConfigurable(
     return nullptr;
 }
 
+struct ApexCodec_Buffer {
+public:
+    ApexCodec_Buffer()
+          : mType(APEXCODEC_BUFFER_TYPE_EMPTY) {
+    }
+
+    ~ApexCodec_Buffer() {
+    }
+
+    void clear() {
+        mType = APEXCODEC_BUFFER_TYPE_EMPTY;
+        mBufferInfo.reset();
+        mLinearBuffer = {};
+        mGraphicBuffer = nullptr;
+        mConfigUpdates.reset();
+        mOwnedConfigUpdates.reset();
+    }
+
+    ApexCodec_BufferType getType() const {
+        return mType;
+    }
+
+    void setBufferInfo(ApexCodec_BufferFlags flags, uint64_t frameIndex, uint64_t timestampUs) {
+        mBufferInfo.emplace(BufferInfo{flags, frameIndex, timestampUs});
+    }
+
+    ApexCodec_Status setLinearBuffer(const ApexCodec_LinearBuffer *linearBuffer) {
+        if (mType != APEXCODEC_BUFFER_TYPE_EMPTY) {
+            return APEXCODEC_STATUS_BAD_STATE;
+        }
+        mType = APEXCODEC_BUFFER_TYPE_LINEAR;
+        if (linearBuffer == nullptr) {
+            mLinearBuffer.data = nullptr;
+            mLinearBuffer.size = 0;
+        } else {
+            mLinearBuffer = *linearBuffer;
+        }
+        return APEXCODEC_STATUS_OK;
+    }
+
+    ApexCodec_Status setGraphicBuffer(AHardwareBuffer *graphicBuffer) {
+        if (mType != APEXCODEC_BUFFER_TYPE_EMPTY) {
+            return APEXCODEC_STATUS_BAD_STATE;
+        }
+        mType = APEXCODEC_BUFFER_TYPE_GRAPHIC;
+        mGraphicBuffer = graphicBuffer;
+        return APEXCODEC_STATUS_OK;
+    }
+
+    ApexCodec_Status setConfigUpdates(const ApexCodec_LinearBuffer *configUpdates) {
+        if (configUpdates == nullptr) {
+            return APEXCODEC_STATUS_BAD_VALUE;
+        }
+        if (mConfigUpdates.has_value()) {
+            return APEXCODEC_STATUS_BAD_STATE;
+        }
+        mOwnedConfigUpdates.reset();
+        mConfigUpdates.emplace(*configUpdates);
+        return APEXCODEC_STATUS_OK;
+    }
+
+    ApexCodec_Status getBufferInfo(
+            ApexCodec_BufferFlags *outFlags,
+            uint64_t *outFrameIndex,
+            uint64_t *outTimestampUs) const {
+        if (!mBufferInfo.has_value()) {
+            return APEXCODEC_STATUS_BAD_STATE;
+        }
+        *outFlags = mBufferInfo->flags;
+        *outFrameIndex = mBufferInfo->frameIndex;
+        *outTimestampUs = mBufferInfo->timestampUs;
+        return APEXCODEC_STATUS_OK;
+    }
+
+    ApexCodec_Status getLinearBuffer(ApexCodec_LinearBuffer *outLinearBuffer) const {
+        if (mType != APEXCODEC_BUFFER_TYPE_LINEAR) {
+            return APEXCODEC_STATUS_BAD_STATE;
+        }
+        *outLinearBuffer = mLinearBuffer;
+        return APEXCODEC_STATUS_OK;
+    }
+
+    ApexCodec_Status getGraphicBuffer(AHardwareBuffer **outGraphicBuffer) const {
+        if (mType != APEXCODEC_BUFFER_TYPE_GRAPHIC) {
+            return APEXCODEC_STATUS_BAD_STATE;
+        }
+        *outGraphicBuffer = mGraphicBuffer;
+        return APEXCODEC_STATUS_OK;
+    }
+
+    ApexCodec_Status getConfigUpdates(
+            ApexCodec_LinearBuffer *outConfigUpdates,
+            bool *outOwnedByClient) const {
+        if (!mConfigUpdates.has_value()) {
+            return APEXCODEC_STATUS_NOT_FOUND;
+        }
+        *outConfigUpdates = mConfigUpdates.value();
+        *outOwnedByClient = mOwnedConfigUpdates.has_value();
+        return APEXCODEC_STATUS_OK;
+    }
+
+    void setOwnedConfigUpdates(std::vector<uint8_t> &&configUpdates) {
+        mOwnedConfigUpdates = std::move(configUpdates);
+        mConfigUpdates.emplace(
+                ApexCodec_LinearBuffer{ configUpdates.data(), configUpdates.size() });
+    }
+
+private:
+    struct BufferInfo {
+        ApexCodec_BufferFlags flags;
+        uint64_t frameIndex;
+        uint64_t timestampUs;
+    };
+
+    ApexCodec_BufferType mType;
+    std::optional<BufferInfo> mBufferInfo;
+    ApexCodec_LinearBuffer mLinearBuffer;
+    AHardwareBuffer *mGraphicBuffer;
+    std::optional<ApexCodec_LinearBuffer> mConfigUpdates;
+    std::optional<std::vector<uint8_t>> mOwnedConfigUpdates;
+};
+
 ApexCodec_Buffer *ApexCodec_Buffer_create() {
-    return nullptr;
+    return new ApexCodec_Buffer;
 }
 
-void ApexCodec_Buffer_destroy(ApexCodec_Buffer *buffer) {}
+void ApexCodec_Buffer_destroy(ApexCodec_Buffer *buffer) {
+    delete buffer;
+}
 
-void ApexCodec_Buffer_clear(ApexCodec_Buffer *buffer) {}
+void ApexCodec_Buffer_clear(ApexCodec_Buffer *buffer) {
+    if (buffer == nullptr) {
+        return;
+    }
+    buffer->clear();
+}
 
 ApexCodec_BufferType ApexCodec_Buffer_getType(ApexCodec_Buffer *buffer) {
-    return APEXCODEC_BUFFER_TYPE_EMPTY;
+    if (buffer == nullptr) {
+        return APEXCODEC_BUFFER_TYPE_EMPTY;
+    }
+    return buffer->getType();
 }
 
 void ApexCodec_Buffer_setBufferInfo(
@@ -182,24 +314,37 @@ void ApexCodec_Buffer_setBufferInfo(
         ApexCodec_BufferFlags flags,
         uint64_t frameIndex,
         uint64_t timestampUs) {
+    if (buffer == nullptr) {
+        return;
+    }
+    buffer->setBufferInfo(flags, frameIndex, timestampUs);
 }
 
 ApexCodec_Status ApexCodec_Buffer_setLinearBuffer(
         ApexCodec_Buffer *buffer,
         const ApexCodec_LinearBuffer *linearBuffer) {
-    return APEXCODEC_STATUS_OMITTED;
+    if (buffer == nullptr) {
+        return APEXCODEC_STATUS_BAD_VALUE;
+    }
+    return buffer->setLinearBuffer(linearBuffer);
 }
 
 ApexCodec_Status ApexCodec_Buffer_setGraphicBuffer(
         ApexCodec_Buffer *buffer,
         AHardwareBuffer *graphicBuffer) {
-    return APEXCODEC_STATUS_OMITTED;
+    if (buffer == nullptr) {
+        return APEXCODEC_STATUS_BAD_VALUE;
+    }
+    return buffer->setGraphicBuffer(graphicBuffer);
 }
 
 ApexCodec_Status ApexCodec_Buffer_setConfigUpdates(
         ApexCodec_Buffer *buffer,
         const ApexCodec_LinearBuffer *configUpdates) {
-    return APEXCODEC_STATUS_OMITTED;
+    if (buffer == nullptr) {
+        return APEXCODEC_STATUS_BAD_VALUE;
+    }
+    return buffer->setConfigUpdates(configUpdates);
 }
 
 ApexCodec_Status ApexCodec_Buffer_getBufferInfo(
@@ -207,26 +352,38 @@ ApexCodec_Status ApexCodec_Buffer_getBufferInfo(
         ApexCodec_BufferFlags *outFlags,
         uint64_t *outFrameIndex,
         uint64_t *outTimestampUs) {
-    return APEXCODEC_STATUS_OMITTED;
+    if (buffer == nullptr) {
+        return APEXCODEC_STATUS_BAD_VALUE;
+    }
+    return buffer->getBufferInfo(outFlags, outFrameIndex, outTimestampUs);
 }
 
 ApexCodec_Status ApexCodec_Buffer_getLinearBuffer(
         ApexCodec_Buffer *buffer,
         ApexCodec_LinearBuffer *outLinearBuffer) {
-    return APEXCODEC_STATUS_OMITTED;
+    if (buffer == nullptr) {
+        return APEXCODEC_STATUS_BAD_VALUE;
+    }
+    return buffer->getLinearBuffer(outLinearBuffer);
 }
 
 ApexCodec_Status ApexCodec_Buffer_getGraphicBuffer(
         ApexCodec_Buffer *buffer,
         AHardwareBuffer **outGraphicBuffer) {
-    return APEXCODEC_STATUS_OMITTED;
+    if (buffer == nullptr) {
+        return APEXCODEC_STATUS_BAD_VALUE;
+    }
+    return buffer->getGraphicBuffer(outGraphicBuffer);
 }
 
 ApexCodec_Status ApexCodec_Buffer_getConfigUpdates(
         ApexCodec_Buffer *buffer,
         ApexCodec_LinearBuffer *outConfigUpdates,
         bool *outOwnedByClient) {
-    return APEXCODEC_STATUS_OMITTED;
+    if (buffer == nullptr) {
+        return APEXCODEC_STATUS_BAD_VALUE;
+    }
+    return buffer->getConfigUpdates(outConfigUpdates, outOwnedByClient);
 }
 
 ApexCodec_Status ApexCodec_SupportedValues_getTypeAndValues(
