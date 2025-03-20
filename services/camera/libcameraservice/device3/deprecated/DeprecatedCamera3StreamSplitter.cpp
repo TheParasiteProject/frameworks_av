@@ -527,7 +527,8 @@ void DeprecatedCamera3StreamSplitter::onFrameAvailable(const BufferItem& /*item*
     uint64_t bufferId;
     if (bufferItem.mGraphicBuffer != nullptr) {
         mInputSlots[bufferItem.mSlot] = bufferItem;
-    } else if (bufferItem.mAcquireCalled) {
+    } else if (bufferItem.mAcquireCalled
+            && (mInputSlots[bufferItem.mSlot].mGraphicBuffer != nullptr)) {
         bufferItem.mGraphicBuffer = mInputSlots[bufferItem.mSlot].mGraphicBuffer;
         mInputSlots[bufferItem.mSlot].mFrameNumber = bufferItem.mFrameNumber;
     } else {
