@@ -289,7 +289,7 @@ class DeprecatedCamera3StreamSplitter : public IConsumerListener {
     std::atomic<status_t> mOnFrameAvailableRes{0};
 
     // Currently acquired input buffers
-    size_t mAcquiredInputBuffers;
+    size_t mAcquiredInputBuffers = 0;
 
     std::string mConsumerName;
 
