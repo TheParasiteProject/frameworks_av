@@ -5135,9 +5135,12 @@ status_t AudioFlinger::listAudioPatches(
 
 /**
  * Get the attributes of the mix port when connecting to the given device port.
+ * If `mixPortHalId` is not `AUDIO_PORT_HANDLE_NONE`, it will be used to determine
+ * the mix port. Otherwise, `mixPort->ext.mix.handle` will be used.
  */
 status_t AudioFlinger::getAudioMixPort(const struct audio_port_v7 *devicePort,
-                                       struct audio_port_v7 *mixPort) const {
+                                       struct audio_port_v7 *mixPort,
+                                       int32_t mixPortHalId) const {
     if (status_t status = AudioValidator::validateAudioPort(*devicePort); status != NO_ERROR) {
         ALOGE("%s, invalid device port, status=%d", __func__, status);
         return status;
@@ -5148,7 +5151,7 @@ status_t AudioFlinger::getAudioMixPort(const struct audio_port_v7 *devicePort,
     }
 
     audio_utils::lock_guard _l(mutex());
-    return mPatchPanel->getAudioMixPort_l(devicePort, mixPort);
+    return mPatchPanel->getAudioMixPort_l(devicePort, mixPort, mixPortHalId);
 }
 
 status_t AudioFlinger::setTracksInternalMute(

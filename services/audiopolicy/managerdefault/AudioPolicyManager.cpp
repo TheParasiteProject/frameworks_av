@@ -9090,7 +9090,8 @@ void AudioPolicyManager::updateAudioProfiles(const sp<DeviceDescriptor>& devDesc
     profile->toAudioPort(&mixPort);
     mixPort.ext.mix.handle = ioHandle;
 
-    status_t status = mpClientInterface->getAudioMixPort(&devicePort, &mixPort);
+    status_t status = mpClientInterface->getAudioMixPort(&devicePort, &mixPort,
+                                                         AUDIO_PORT_HANDLE_NONE);
     if (status != NO_ERROR) {
         ALOGE("%s failed to query the attributes of the mix port", __func__);
         return;
