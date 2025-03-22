@@ -737,9 +737,10 @@ static void dumpCodecDetails(bool queryDecoders) {
                 }
 
                 printf("    owner: \"%s\"\n", info->getOwnerName());
+                printf("    hal name: \"%s\"\n", info->getHalName());
                 printf("    rank: %u\n", info->getRank());
             } else {
-                printf("    aliases, attributes, owner, rank: see above\n");
+                printf("    aliases, attributes, owner, hal name, rank: see above\n");
             }
 
             {
@@ -1134,20 +1135,10 @@ int main(int argc, char **argv) {
             CHECK(gSurface != NULL);
         } else {
             CHECK(useSurfaceTexAlloc);
-#if COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_CONSUMER_BASE_OWNS_BQ)
-            sp<GLConsumer> texture =
-                    new GLConsumer(0 /* tex */, GLConsumer::TEXTURE_EXTERNAL,
-                                   true /* useFenceSync */, false /* isControlledByApp */);
-            gSurface = texture->getSurface();
-#else
-            sp<IGraphicBufferProducer> producer;
-            sp<IGraphicBufferConsumer> consumer;
-            BufferQueue::createBufferQueue(&producer, &consumer);
-            sp<GLConsumer> texture = new GLConsumer(consumer, 0 /* tex */,
-                    GLConsumer::TEXTURE_EXTERNAL, true /* useFenceSync */,
-                    false /* isControlledByApp */);
-            gSurface = new Surface(producer);
-#endif  // COM_ANDROID_GRAPHICS_LIBGUI_FLAGS(WB_CONSUMER_BASE_OWNS_BQ)
+            sp<GLConsumer> texture;
+            std::tie(texture, gSurface) =
+                    GLConsumer::create(0 /* tex */, GLConsumer::TEXTURE_EXTERNAL,
+                                       true /* useFenceSync */, false /* isControlledByApp */);
         }
     }
 
