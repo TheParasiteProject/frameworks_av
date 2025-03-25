@@ -29,7 +29,6 @@
 #include <vector>
 
 #include "VirtualCameraCaptureRequest.h"
-#include "VirtualCameraDevice.h"
 #include "VirtualCameraSessionContext.h"
 #include "aidl/android/hardware/camera/device/CameraMetadata.h"
 #include "aidl/android/hardware/camera/device/ICameraDeviceCallback.h"

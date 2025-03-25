@@ -103,6 +103,9 @@ static constexpr UpdateTextureTask kUpdateTextureTask;
 
 // The number of nanosecond to wait for the first frame to be drawn on the input surface
 static constexpr std::chrono::nanoseconds kMaxWaitFirstFrame = 3s;
+// The number of nanosecond to wait for a frame for use cases where frame
+// duplication is not an option.
+static constexpr std::chrono::nanoseconds kMaxWaitNoDuplication = 60s;
 
 static constexpr double kOneSecondInNanos = 1e9;
 
@@ -174,6 +177,22 @@ bool isYuvFormat(const PixelFormat pixelFormat) {
   }
 }
 
+// By default, virtual camera will duplicate the last frame if the producer does
+// not post a new frame. When a frame is duplicated, the timestamp must still
+// increase to please the camera framework expectations. In some usecases, this
+// frame duplication is not wanted, like for motion tracking, where the
+// timestamp must match the graphic data.
+bool allowFrameDuplication(const RequestSettings& requestSettings) {
+  if (!flags::virtual_camera_no_frame_duplication()) {
+    return true;
+  }
+  if (requestSettings.captureIntent == ANDROID_CONTROL_CAPTURE_INTENT_PREVIEW) {
+    return true;
+  }
+
+  return false;
+}
+
 std::vector<uint8_t> createExif(
     Resolution imageSize, const CameraMetadata resultMetadata,
     const std::vector<uint8_t>& compressedThumbnail = {}) {
@@ -221,6 +240,20 @@ std::chrono::nanoseconds getMaxFrameDuration(
     return std::chrono::nanoseconds(static_cast<uint64_t>(
         kOneSecondInNanos / std::max(1, requestSettings.fpsRange->minFps)));
   }
+
+  // If the request does not specify a FPS and we should not duplicate frames,
+  // wait as much as we can
+  if (!allowFrameDuplication(requestSettings)) {
+    return kMaxWaitNoDuplication;
+  }
+
+  // If we can duplicate frame but nothing has been drawn on the suface yet, we
+  // allow ourselves to wait a bit longer
+  if (!isFirstFrameDrawn) {
+    return kMaxWaitFirstFrame;
+  }
+
+  // In all other cases we wait for the duration of kMinFps
   return std::chrono::nanoseconds(
       static_cast<uint64_t>(kOneSecondInNanos / VirtualCameraDevice::kMinFps));
 }
@@ -406,7 +439,8 @@ void VirtualCameraRenderThread::threadLoop() {
 
 void VirtualCameraRenderThread::processTask(
     const ProcessCaptureRequestTask& request) {
-  ALOGV("%s request frame number %d", __func__, request.getFrameNumber());
+  ALOGV("%s Request frame number: %d, capture intent %d", __func__,
+        request.getFrameNumber(), request.getRequestSettings().captureIntent);
   std::chrono::nanoseconds deviceTime =
       std::chrono::duration_cast<std::chrono::nanoseconds>(
           std::chrono::steady_clock::now().time_since_epoch());
@@ -434,28 +468,26 @@ void VirtualCameraRenderThread::processTask(
   if (waitTime > 0ns) {
     // We can afford to wait for next frame.
     // Note that if there's already new frame in the input Surface, the call
-    // below returns immediatelly.
-    bool gotNewFrame = mEglSurfaceTexture->waitForNextFrame(waitTime);
-    deviceTime = std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::steady_clock::now().time_since_epoch());
-    if (!gotNewFrame) {
-      if (!mEglSurfaceTexture->isFirstFrameDrawn()) {
-        // We don't have any input ever drawn. This is considered as an error
-        // case. Notify the framework of the failure and return early.
-        ALOGW("Timed out waiting for first frame to be drawn.");
-        std::unique_ptr<CaptureResult> captureResult = createCaptureResult(
-            request.getFrameNumber(), /* metadata = */ nullptr);
-        notifyTimeout(request, *captureResult);
-        submitCaptureResult(std::move(captureResult));
-        return;
-      }
+    // below returns immediately.
+    gotNewFrame = mEglSurfaceTexture->waitForNextFrame(waitTime);
+  }
 
-      ALOGV(
-          "%s: No new frame received on input surface after waiting for "
-          "%" PRIu64 "ns, repeating last frame.",
-          __func__,
-          static_cast<uint64_t>(
-              (deviceTime - lastAcquisitionTimestamp).count()));
+  if (!gotNewFrame) {
+    ALOGV(
+        "%s: No new frame received on input surface after waiting for "
+        "%.3f s",
+        __func__, static_cast<uint64_t>(waitTime.count()) / kOneSecondInNanos);
+
+    if (!allowFrameDuplication(request.getRequestSettings()) ||
+        !mEglSurfaceTexture->isFirstFrameDrawn()) {
+      // We don't have any input ever drawn. This is considered as an error
+      // case. Notify the framework of the failure and return early.
+      ALOGW("Timed out waiting for frame to be posted.");
+      std::unique_ptr<CaptureResult> captureResult = createCaptureResult(
+          request.getFrameNumber(), /* metadata = */ nullptr);
+      notifyTimeout(request, *captureResult);
+      submitCaptureResult(std::move(captureResult));
+      return;
     }
   }
 
@@ -489,7 +521,6 @@ void VirtualCameraRenderThread::processTask(
                                              std::memory_order_relaxed);
 
   std::chrono::nanoseconds captureTimestamp = deviceTime;
-
   if (flags::camera_timestamp_from_surface()) {
     std::chrono::nanoseconds surfaceTimestamp =
         getSurfaceTimestamp(elapsedDuration);
@@ -535,7 +566,7 @@ void VirtualCameraRenderThread::throttleRendering(
   if (frameDuration < minFrameDuration) {
     // We're too fast for the configured maxFps, let's wait a bit.
     const std::chrono::nanoseconds sleepTime = minFrameDuration - frameDuration;
-    ALOGV("Current frame duration would  be %" PRIu64
+    ALOGV("Current frame duration would be %" PRIu64
           " ns corresponding to %.3f Fps, "
           "sleeping for %" PRIu64
           " ns before updating texture to match maxFps %d",
