@@ -4168,6 +4168,8 @@ void AudioPolicyManagerTestAbsoluteVolume::SetUp() {
 
     mManager->setDeviceAbsoluteVolumeEnabled(AUDIO_DEVICE_OUT_USB_DEVICE, "", /*enabled=*/true,
                                              AUDIO_STREAM_MUSIC);
+    mManager->setDeviceAbsoluteVolumeEnabled(AUDIO_DEVICE_OUT_BLUETOOTH_SCO, "", /*enabled=*/true,
+                                             AUDIO_STREAM_VOICE_CALL);
 }
 
 void AudioPolicyManagerTestAbsoluteVolume::TearDown() {
@@ -4337,6 +4339,10 @@ void AudioPolicyManagerTestAbsoluteVolume::setVolumeIndexForDtmfAttributesOnSco(
                                              &dtmfOutput, &mOutputPortId, sDtmfAttr));
     ASSERT_EQ(NO_ERROR, mManager->startOutput(mOutputPortId));
 
+    // voice call needs to be adjusted to the same level since they are usually aliased
+    EXPECT_EQ(NO_ERROR, mManager->setVolumeIndexForAttributes(sVoiceCallAttr, /*index=*/1,
+                                                              /*muted=*/false,
+                                                              AUDIO_DEVICE_OUT_BLUETOOTH_SCO));
     EXPECT_EQ(NO_ERROR, mManager->setVolumeIndexForAttributes(sDtmfAttr, /*index=*/1,
                                                               /*muted=*/false,
                                                               AUDIO_DEVICE_OUT_BLUETOOTH_SCO));
