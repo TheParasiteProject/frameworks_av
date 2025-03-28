@@ -251,9 +251,9 @@ status_t StagefrightRecorder::init() {
 // The client side of mediaserver asks it to create a SurfaceMediaSource
 // and return a interface reference. The client side will use that
 // while encoding GL Frames
-sp<IGraphicBufferProducer> StagefrightRecorder::querySurfaceMediaSource() const {
+sp<MediaSurfaceType> StagefrightRecorder::querySurfaceMediaSource() const {
     ALOGV("Get SurfaceMediaSource");
-    return mGraphicBufferProducer;
+    return mSurface;
 }
 
 status_t StagefrightRecorder::setAudioSource(audio_source_t as) {
@@ -401,10 +401,9 @@ status_t StagefrightRecorder::setCamera(const sp<hardware::ICamera> &camera,
     return OK;
 }
 
-status_t StagefrightRecorder::setPreviewSurface(const sp<IGraphicBufferProducer> &surface) {
+status_t StagefrightRecorder::setPreviewSurface(const sp<MediaSurfaceType> &surface) {
     ALOGV("setPreviewSurface: %p", surface.get());
     mPreviewSurface = surface;
-
     return OK;
 }
 
@@ -1936,44 +1935,15 @@ status_t StagefrightRecorder::setupCameraSource(
             return BAD_VALUE;
         }
 
-#if WB_LIBCAMERASERVICE_WITH_DEPENDENCIES
-        if (!mPreviewSurface) {
-            // `Surface(...)` below does not support nullptr in its ctor
-            ALOGE("mPreviewSurface is null. Forgot to call setPreviewSurface?");
-            return INVALID_OPERATION;
-        }
-
-        sp<Surface> surface = new Surface(mPreviewSurface);
         mCameraSourceTimeLapse = CameraSourceTimeLapse::CreateFromCamera(
-                mCamera, mCameraProxy, mCameraId, clientName, uid, pid,
-                videoSize, mFrameRate, surface,
+                mCamera, mCameraProxy, mCameraId, clientName, uid, pid, videoSize, mFrameRate,
+                mediaflagtools::mediaSurfaceToCameraSurfaceType(mPreviewSurface),
                 std::llround(1e6 / mCaptureFps));
-#else
-        mCameraSourceTimeLapse = CameraSourceTimeLapse::CreateFromCamera(
-                mCamera, mCameraProxy, mCameraId, clientName, uid, pid,
-                videoSize, mFrameRate, mPreviewSurface,
-                std::llround(1e6 / mCaptureFps));
-#endif
         *cameraSource = mCameraSourceTimeLapse;
     } else {
-#if WB_LIBCAMERASERVICE_WITH_DEPENDENCIES
-        if (!mPreviewSurface) {
-            // `Surface(...)` below does not support nullptr in its ctor
-            ALOGE("mPreviewSurface is null. Forgot to call setPreviewSurface?");
-            return INVALID_OPERATION;
-        }
-
-        sp<Surface> surface = new Surface(mPreviewSurface);
         *cameraSource = CameraSource::CreateFromCamera(
-                mCamera, mCameraProxy, mCameraId, clientName, uid, pid,
-                videoSize, mFrameRate,
-                surface);
-#else
-        *cameraSource = CameraSource::CreateFromCamera(
-                mCamera, mCameraProxy, mCameraId, clientName, uid, pid,
-                videoSize, mFrameRate,
-                mPreviewSurface);
-#endif
+                mCamera, mCameraProxy, mCameraId, clientName, uid, pid, videoSize, mFrameRate,
+                mediaflagtools::mediaSurfaceToCameraSurfaceType(mPreviewSurface));
     }
     mCamera.clear();
     mCameraProxy.clear();
@@ -2187,7 +2157,7 @@ status_t StagefrightRecorder::setupVideoEncoder(
     }
 
     if (cameraSource == NULL) {
-        mGraphicBufferProducer = encoder->getGraphicBufferProducer();
+        mSurface = mediaflagtools::igbpToSurfaceType(encoder->getGraphicBufferProducer());
     }
 
     *source = encoder;
@@ -2468,7 +2438,7 @@ status_t StagefrightRecorder::stop() {
     mPauseStartTimeUs = 0;
     mStartedRecordingUs = 0;
 
-    mGraphicBufferProducer.clear();
+    mSurface.clear();
     mPersistentSurface.clear();
     mAudioEncoderSource.clear();
     mVideoEncoderSource.clear();
