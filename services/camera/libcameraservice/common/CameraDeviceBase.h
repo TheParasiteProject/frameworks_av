@@ -362,6 +362,11 @@ class CameraDeviceBase : public virtual FrameProducer {
             int32_t *sharedReqID, int64_t *lastFrameNumber = NULL) = 0;
 
     /**
+     * Get the HAL's CaptureResult FMQ Size.
+     */
+    virtual int32_t getCaptureResultFMQSize() = 0;
+
+    /**
      * Take the currently-defined set of streams and configure the HAL to use
      * them. This is a long-running operation (may be several hundered ms).
      *
