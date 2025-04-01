@@ -2106,7 +2106,7 @@ void MediaCodec::updatePictureProfile(const sp<AMessage>& msg, bool applyDefault
     sp<IMediaQualityManager> mediaQualityMgr =
             waitForDeclaredService<IMediaQualityManager>(String16("media_quality"));
     if (mediaQualityMgr == nullptr) {
-        ALOGE("Media Quality Service not found.");
+        ALOGI("media_quality service unavailable, skipping updatePictureProfile");
         return;
     }
 
