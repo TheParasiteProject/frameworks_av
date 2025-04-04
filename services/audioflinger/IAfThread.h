@@ -491,7 +491,7 @@ public:
 
     virtual status_t addTrack_l(const sp<IAfTrack>& track) REQUIRES(mutex()) = 0;
     virtual bool destroyTrack_l(const sp<IAfTrack>& track) REQUIRES(mutex()) = 0;
-    virtual bool isTrackActive(const sp<IAfTrack>& track) const REQUIRES(mutex()) = 0;
+    virtual bool isTrackActive_l(const sp<IAfTrack>& track) const REQUIRES(mutex()) = 0;
     virtual void addOutputTrack_l(const sp<IAfTrack>& track) REQUIRES(mutex()) = 0;
 
     virtual AudioStreamOut* getOutput_l() const REQUIRES(mutex()) = 0;
