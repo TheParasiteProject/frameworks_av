@@ -246,6 +246,48 @@ TrackClientVector AudioOutputDescriptor::clientsList(bool activeOnly, product_st
     return clients;
 }
 
+sp<TrackClientDescriptor> AudioOutputDescriptor::getHighestPriorityClientForVolumeSource(
+        VolumeSource vs, bool activeOnly) const
+{
+    sp<TrackClientDescriptor> clientForVolume = nullptr;
+    for (const auto &client : getClientIterable()) {
+        if ((!activeOnly || client->active()) && (vs == client->volumeSource())) {
+            // strategies are ordered, the lowest id the highest priority
+            if (clientForVolume == nullptr || clientForVolume->strategy() > client->strategy()) {
+                clientForVolume = client;
+            }
+        }
+    }
+    return clientForVolume;
+}
+
+bool AudioOutputDescriptor::canSetVolumeForVolumeSource(android::VolumeSource vs) const {
+    if (!useHwGain()) {
+        return true;
+    }
+    auto highestPrioActiveClientForVolume =
+            getHighestPriorityClientForVolumeSource(vs, /* active= */ true);
+    if (highestPrioActiveClientForVolume == nullptr) {
+        ALOGV("%s trying to set volume for inactive volume source %d", __func__, vs);
+        return false;
+    }
+    for (const auto &client: clientsList(true /*activeOnly*/)) {
+        bool isHigherPriority = client->strategy() < highestPrioActiveClientForVolume->strategy();
+        if (isHigherPriority && (client->volumeSource() != vs)) {
+            ALOGV("%s: found higher priority client on output with \n"
+                    "Strategy=%d volumeGroup=%d attributes=%s\n"
+                    "(\nrequester:\n strategy=%d volumeGroup=%d attributes=%s)\n"
+                    " on output, bailing out", __func__, client->strategy(),
+                    client->volumeSource(), toString(client->attributes()).c_str(),
+                    highestPrioActiveClientForVolume->strategy(),
+                    highestPrioActiveClientForVolume->volumeSource(),
+                    toString(highestPrioActiveClientForVolume->attributes()).c_str());
+            return false;
+        }
+    }
+    return true;
+}
+
 size_t AudioOutputDescriptor::sameExclusivePreferredDevicesCount() const
 {
     audio_port_handle_t deviceId = AUDIO_PORT_HANDLE_NONE;
@@ -548,7 +590,8 @@ bool SwAudioOutputDescriptor::setVolume(float volumeDb, bool mutedByGroup,
     StreamTypeVector streams = streamTypes;
     if (!AudioOutputDescriptor::setVolume(
             volumeDb, mutedByGroup, vs, streamTypes, deviceTypes, delayMs, force, isVoiceVolSrc)) {
-        if (hasStream(streamTypes, AUDIO_STREAM_BLUETOOTH_SCO)) {
+        if (hasStream(streamTypes, AUDIO_STREAM_BLUETOOTH_SCO) &&
+                !com_android_media_audio_replace_stream_bt_sco()) {
             VolumeSource callVolSrc = getVoiceSource();
             const bool mutedChanged =
                     com_android_media_audio_ring_my_car() && hasVolumeSource(callVolSrc) &&
@@ -620,7 +663,8 @@ bool SwAudioOutputDescriptor::setVolume(float volumeDb, bool mutedByGroup,
     }
     // Force VOICE_CALL to track BLUETOOTH_SCO stream volume when bluetooth audio is enabled
     float volumeAmpl = Volume::DbToAmpl(getCurVolume(vs));
-    if (hasStream(streams, AUDIO_STREAM_BLUETOOTH_SCO)) {
+    if (hasStream(streams, AUDIO_STREAM_BLUETOOTH_SCO) &&
+            !com_android_media_audio_replace_stream_bt_sco()) {
         VolumeSource callVolSrc = getVoiceSource();
         if (audioserver_flags::portid_volume_management()) {
             if (callVolSrc != VOLUME_SOURCE_NONE) {
