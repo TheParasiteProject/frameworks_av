@@ -3838,9 +3838,10 @@ status_t AudioPolicyManager::setVolumeIndexForGroup(volume_group_t group,
         //FIXME: workaround for truncated touch sounds
         // delayed volume change for system stream to be removed when the problem is
         // handled by system UI
-        status_t volStatus = checkAndSetVolume(curves, vs, index, desc, curDevices,
-                    ((vs == toVolumeSource(AUDIO_STREAM_SYSTEM, false))?
-                         TOUCH_SOUND_FIXED_DELAY_MS : 0));
+        status_t volStatus = checkAndSetVolume(curves, vs, index, desc,
+                                               curDevices, /*adjustAttenuation*/true,
+                                               ((vs == toVolumeSource(AUDIO_STREAM_SYSTEM, false)) ?
+                                                TOUCH_SOUND_FIXED_DELAY_MS : 0));
         if (volStatus != NO_ERROR) {
             status = volStatus;
         }
@@ -8679,6 +8680,7 @@ status_t AudioPolicyManager::checkAndSetVolume(IVolumeCurves &curves,
                                                int index,
                                                const sp<AudioOutputDescriptor>& outputDesc,
                                                DeviceTypeSet deviceTypes,
+                                               bool adjustAttenuation,
                                                int delayMs,
                                                bool force)
 {
@@ -8720,7 +8722,7 @@ status_t AudioPolicyManager::checkAndSetVolume(IVolumeCurves &curves,
         return BAD_VALUE;
     }
 
-    float volumeDb = computeVolume(curves, volumeSource, index, deviceTypes);
+    float volumeDb = computeVolume(curves, volumeSource, index, deviceTypes, adjustAttenuation);
     const VolumeSource dtmfVolSrc = toVolumeSource(AUDIO_STREAM_DTMF, false);
     // Force VoIP volume to max for bluetooth SCO/BLE device except if muted
     bool isAbsVolumeType = !android_media_audio_unify_absolute_volume_management()
@@ -8811,7 +8813,7 @@ void AudioPolicyManager::applyStreamVolumes(const sp<AudioOutputDescriptor>& out
     for (const auto &volumeGroup : mEngine->getVolumeGroups()) {
         auto &curves = getVolumeCurves(toVolumeSource(volumeGroup));
         checkAndSetVolume(curves, toVolumeSource(volumeGroup), curves.getVolumeIndex(deviceTypes),
-                          outputDesc, deviceTypes, delayMs, force);
+                          outputDesc, deviceTypes, /*adjustAttenuation=*/true, delayMs, force);
     }
 }
 
@@ -8854,7 +8856,10 @@ void AudioPolicyManager::setVolumeSourceMutedInternally(VolumeSource volumeSourc
                     (volumeSource != toVolumeSource(AUDIO_STREAM_ENFORCED_AUDIBLE, false) ||
                      (mEngine->getForceUse(AUDIO_POLICY_FORCE_FOR_SYSTEM) ==
                       AUDIO_POLICY_FORCE_NONE))) {
-                checkAndSetVolume(curves, volumeSource, 0, outputDesc, deviceTypes, delayMs);
+                // use adjustAttenuation as false to mute on BLE broadcast devices which have
+                // an absolute volume mode muting exception
+                checkAndSetVolume(curves, volumeSource, 0, outputDesc,
+                                  deviceTypes, /*adjustAttenuation=*/false, delayMs);
             }
         }
         // increment mMuteCount after calling checkAndSetVolume() so that volume change is not
@@ -8870,6 +8875,7 @@ void AudioPolicyManager::setVolumeSourceMutedInternally(VolumeSource volumeSourc
                               curves.getVolumeIndex(deviceTypes),
                               outputDesc,
                               deviceTypes,
+                              /*adjustAttenuation=*/true,
                               delayMs);
         }
     }
