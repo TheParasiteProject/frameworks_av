@@ -590,7 +590,7 @@ private:
     IAfThreadBase* hapticPlaybackThread_l() const REQUIRES(mutex());
 
               void updateSecondaryOutputsForTrack_l(
-                      IAfTrack* track,
+            const sp<IAfTrack>& track,
                       IAfPlaybackThread* thread,
             const std::vector<audio_io_handle_t>& secondaryOutputs) const REQUIRES(mutex());
 
