@@ -1157,13 +1157,18 @@ sp<IOProfile> AudioPolicyManager::searchCompatibleProfileHwModules (
     sp<IOProfile> directOnlyProfile = nullptr;
     sp<IOProfile> compressOffloadProfile = nullptr;
     sp<IOProfile> profile = nullptr;
+    uint32_t additionalMandatoryFlags = 0;
+    if ((flags & AUDIO_OUTPUT_FLAG_MMAP_NOIRQ) != 0) {
+        // For mmap, only select mmap offload if offload is explicitly requested.
+        additionalMandatoryFlags = AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD;
+    }
     for (const auto& hwModule : hwModules) {
         for (const auto& curProfile : hwModule->getOutputProfiles()) {
              if (curProfile->getCompatibilityScore(devices,
                      samplingRate, NULL /*updatedSamplingRate*/,
                      format, NULL /*updatedFormat*/,
                      channelMask, NULL /*updatedChannelMask*/,
-                     flags) == IOProfile::NO_MATCH) {
+                     flags, additionalMandatoryFlags) == IOProfile::NO_MATCH) {
                  continue;
              }
              // reject profiles not corresponding to a device currently available
