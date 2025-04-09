@@ -1271,7 +1271,8 @@ void ThreadBase::getPowerManager_l() {
     }
 }
 
-void ThreadBase::updateWakeLockUids_l(const SortedVector<uid_t>& uids) {
+// TODO(b/410038399) fix thread safety
+void ThreadBase::updateWakeLockUids_l(const SortedVector<uid_t>& uids) NO_THREAD_SAFETY_ANALYSIS {
     getPowerManager_l();
 
 #if !LOG_NDEBUG
@@ -2009,9 +2010,10 @@ void ThreadBase::ActiveTracks<T>::clear() {
     mLatestActiveTrack.clear();
 }
 
+// TODO(b/410038399) fix thread safety
 template <typename T>
 void ThreadBase::ActiveTracks<T>::updatePowerState_l(
-        const sp<ThreadBase>& thread, bool force) {
+        const sp<ThreadBase>& thread, bool force) NO_THREAD_SAFETY_ANALYSIS{
     // Updates ActiveTracks client uids to the thread wakelock.
     if (mActiveTracksGeneration != mLastActiveTracksGeneration || force) {
         thread->updateWakeLockUids_l(getWakeLockUids());
@@ -2166,7 +2168,6 @@ PlaybackThread::PlaybackThread(const sp<IAfThreadCallback>& afThreadCallback,
         mSuspended(0), mBytesWritten(0),
         mFramesWritten(0),
         mSuspendedFrames(0),
-        mActiveTracks(&this->mLocalLog),
         // mStreamTypes[] initialized in constructor body
         mTracks(type == MIXER),
         mOutput(output),
@@ -8244,7 +8245,6 @@ RecordThread::RecordThread(const sp<IAfThreadCallback>& afThreadCallback,
     ThreadBase(afThreadCallback, id, type, systemReady, false /* isOut */),
     mInput(input),
     mSource(mInput),
-    mActiveTracks(&this->mLocalLog),
     mRsmpInBuffer(NULL),
     // mRsmpInFrames, mRsmpInFramesP2, and mRsmpInFramesOA are set by readInputParameters_l()
     mRsmpInRear(0)
@@ -10420,7 +10420,6 @@ MmapThread::MmapThread(
       mSessionId(AUDIO_SESSION_NONE),
       mPortId(AUDIO_PORT_HANDLE_NONE),
       mHalStream(stream), mHalDevice(hwDev->hwDevice()), mAudioHwDev(hwDev),
-      mActiveTracks(&this->mLocalLog),
       mHalVolFloat(-1.0f), // Initialize to illegal value so it always gets set properly later.
       mNoCallbackWarningCount(0)
 {
