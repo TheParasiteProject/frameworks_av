@@ -104,16 +104,6 @@ flag {
 
 flag {
     namespace: "camera_platform"
-    name: "single_thread_executor_naming"
-    description: "Set the device executor thread name."
-    bug: "359709863"
-    metadata {
-        purpose: PURPOSE_BUGFIX
-    }
-}
-
-flag {
-    namespace: "camera_platform"
     name: "analytics_24q3"
     description: "Miscellaneous camera platform metrics for 24Q3"
     bug: "332557570"
