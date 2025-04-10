@@ -11141,8 +11141,22 @@ void MmapThread::threadLoop_standby()
 
 void MmapThread::threadLoop_exit()
 {
-    // Do not call callback->onTearDown() because it is redundant for thread exit
-    // and because it can cause a recursive mutex lock on stop().
+    sp<MmapStreamCallback> callback;
+    std::vector<audio_port_handle_t> portIds;
+    {
+        audio_utils::lock_guard _l(mutex());
+        callback = mCallback.promote();
+        if (callback == nullptr) {
+            return;
+        }
+        for (const sp<IAfMmapTrack>& track: mActiveTracks) {
+            portIds.push_back(track->portId());
+        }
+    }
+    for (auto portId : portIds) {
+        // It is safe to call tear down here as it is handled asynchronously.
+        callback->onTearDown(portId);
+    }
 }
 
 status_t MmapThread::setSyncEvent(const sp<SyncEvent>& /* event */)
