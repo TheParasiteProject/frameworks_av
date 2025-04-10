@@ -895,40 +895,33 @@ protected:
         // The Tracks class manages tracks added and removed from the Thread.
 
     class Tracks {
-        using T = IAfTrackBase;
     public:
         explicit Tracks(bool saveDeletedTrackIds) :
                 mSaveDeletedTrackIds(saveDeletedTrackIds) { }
 
-        // SortedVector methods
-        ssize_t add(const sp<T>& track) {
-            const ssize_t index = mTracks.add(track);
-            LOG_ALWAYS_FATAL_IF(index < 0, "cannot add track");
-            return index;
+        bool add(const sp<IAfTrackBase>& track) {
+            return mTracks.insert(track).second;  // ignore the iterator.
         }
-        ssize_t remove(const sp<T>& track);
+        bool remove(const sp<IAfTrackBase>& track);
         size_t size() const {
             return mTracks.size();
         }
         bool empty() const {
-            return mTracks.isEmpty();
+            return mTracks.empty();
         }
-        size_t count(const sp<T>& track) const {
-            for (const sp<T> &t : mTracks) {
-                if (track == t) return 1;
-            }
-            return 0;
+        size_t count(const sp<IAfTrackBase>& track) const {
+            return mTracks.count(track);
         }
-        SortedVector<sp<T>>::iterator begin() {
+        auto begin() {
             return mTracks.begin();
         }
-        SortedVector<sp<T>>::iterator end() {
+        auto end() {
             return mTracks.end();
         }
-        SortedVector<const sp<T>>::iterator begin() const {
+        auto begin() const {
             return mTracks.begin();
         }
-        SortedVector<const sp<T>>::iterator end() const  {
+        auto end() const {
             return mTracks.end();
         }
         size_t processDeletedTrackIds(const std::function<void(int)>& f) {
@@ -943,8 +936,7 @@ protected:
         // Tracks pending deletion for MIXER type threads
         const bool mSaveDeletedTrackIds; // true to enable tracking
         std::set<int> mDeletedTrackIds;
-
-        SortedVector<sp<T>> mTracks; // wrapped SortedVector.
+        std::set<sp<IAfTrackBase>> mTracks;
     };
 
     // TODO(b/410038399) should be any mixer enabled thread.
