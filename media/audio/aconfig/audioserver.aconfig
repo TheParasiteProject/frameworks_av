@@ -97,6 +97,14 @@ flag {
 }
 
 flag {
+    name: "mmap_pcm_offload_support"
+    namespace: "media_audio"
+    description:
+        "Add pcm offload support on mmap path."
+    bug: "409798445"
+}
+
+flag {
     name: "portid_volume_management"
     namespace: "media_audio"
     description:
