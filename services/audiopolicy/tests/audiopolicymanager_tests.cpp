@@ -1435,6 +1435,48 @@ TEST_F(AudioPolicyManagerTestWithConfigurationFile, AudioSourceFixedByGetInputfo
                              AUDIO_SOURCE_VOICE_COMMUNICATION);
 }
 
+TEST_F(AudioPolicyManagerTestWithConfigurationFile, SelectMMapOffloadOnlyWhenRequested) {
+    ASSERT_EQ(NO_ERROR, mManager->setDeviceConnectionState(AUDIO_DEVICE_OUT_USB_DEVICE,
+                                                           AUDIO_POLICY_DEVICE_STATE_AVAILABLE,
+                                                           "", "", AUDIO_FORMAT_DEFAULT));
+
+    auto devices = mManager->getAvailableOutputDevices();
+    audio_port_handle_t usbPortId = AUDIO_PORT_HANDLE_NONE;
+    for (auto device : devices) {
+        if (device->type() == AUDIO_DEVICE_OUT_USB_DEVICE) {
+            usbPortId = device->getId();
+            break;
+        }
+    }
+    EXPECT_NE(AUDIO_PORT_HANDLE_NONE, usbPortId);
+
+    const audio_attributes_t mediaAttr = {
+            .content_type = AUDIO_CONTENT_TYPE_MUSIC,
+            .usage = AUDIO_USAGE_MEDIA,
+    };
+
+    for (auto flags : {(AUDIO_OUTPUT_FLAG_MMAP_NOIRQ | AUDIO_OUTPUT_FLAG_DIRECT),
+                       (AUDIO_OUTPUT_FLAG_MMAP_NOIRQ | AUDIO_OUTPUT_FLAG_DIRECT |
+                            AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD)}) {
+        audio_io_handle_t output = AUDIO_IO_HANDLE_NONE;
+        // Use preferred device to ensure usb is selected so that mmap mix port can be used
+        DeviceIdVector selectedDeviceIds = {usbPortId};
+        audio_port_handle_t portId;
+        getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
+                         k48000SamplingRate, static_cast<audio_output_flags_t>(flags), &output,
+                         &portId);
+        EXPECT_NE(AUDIO_IO_HANDLE_NONE, output);
+        sp<SwAudioOutputDescriptor> outDesc = mManager->getOutputs().valueFor(output);
+        ASSERT_NE(nullptr, outDesc.get());
+        EXPECT_EQ(flags, outDesc->getFlags().output);
+        mManager->releaseOutput(portId);
+    }
+
+    ASSERT_EQ(NO_ERROR, mManager->setDeviceConnectionState(AUDIO_DEVICE_OUT_USB_DEVICE,
+                                                           AUDIO_POLICY_DEVICE_STATE_UNAVAILABLE,
+                                                           "", "", AUDIO_FORMAT_DEFAULT));
+}
+
 class AudioPolicyManagerTestDynamicPolicy : public AudioPolicyManagerTestWithConfigurationFile {
 protected:
     void TearDown() override;
