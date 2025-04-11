@@ -11805,33 +11805,25 @@ void BitPerfectThread::setTracksInternalMute(
 }
 
 sp<IAfTrack> BitPerfectThread::getTrackToStreamBitPerfectly_l() {
-    if (com::android::media::audioserver::
-                fix_concurrent_playback_behavior_with_bit_perfect_client()) {
-        sp<IAfTrack> bitPerfectTrack = nullptr;
-        bool allOtherTracksMuted = true;
-        // Return the bit perfect track if all other tracks are muted
-        for (const auto& track : mActiveTracks) {
-            if (track->isBitPerfect()) {
-                if (track->getInternalMute()) {
-                    // There can only be one bit-perfect client active. If it is mute internally,
-                    // there is no need to stream bit-perfectly.
-                    break;
-                }
-                bitPerfectTrack = track;
-            } else if (track->getFinalVolume() != 0.f) {
-                allOtherTracksMuted = false;
-                if (bitPerfectTrack != nullptr) {
-                    break;
-                }
+    sp<IAfTrack> bitPerfectTrack = nullptr;
+    bool allOtherTracksMuted = true;
+    // Return the bit perfect track if all other tracks are muted
+    for (const auto& track : mActiveTracks) {
+        if (track->isBitPerfect()) {
+            if (track->getInternalMute()) {
+                // There can only be one bit-perfect client active. If it is mute internally,
+                // there is no need to stream bit-perfectly.
+                break;
+            }
+            bitPerfectTrack = track;
+        } else if (track->getFinalVolume() != 0.f) {
+            allOtherTracksMuted = false;
+            if (bitPerfectTrack != nullptr) {
+                break;
             }
         }
-        return allOtherTracksMuted ? bitPerfectTrack : nullptr;
-    } else {
-        if (mActiveTracks.size() == 1 && mActiveTracks[0]->isBitPerfect()) {
-            return mActiveTracks[0];
-        }
     }
-    return nullptr;
+    return allOtherTracksMuted ? bitPerfectTrack : nullptr;
 }
 
 } // namespace android

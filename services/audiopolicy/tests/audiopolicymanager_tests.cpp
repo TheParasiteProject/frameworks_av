@@ -4806,13 +4806,7 @@ TEST_F(AudioPolicyManagerTestBitPerfect, UseBitPerfectOutput) {
     EXPECT_EQ(mBitPerfectOutput, output);
 }
 
-TEST_F_WITH_FLAGS(
-        AudioPolicyManagerTestBitPerfect,
-        InternalMuteWhenBitPerfectCLientIsActive,
-        REQUIRES_FLAGS_ENABLED(
-                ACONFIG_FLAG(com::android::media::audioserver,
-                             fix_concurrent_playback_behavior_with_bit_perfect_client))
-) {
+TEST_F(AudioPolicyManagerTestBitPerfect, InternalMuteWhenBitPerfectCLientIsActive) {
     ASSERT_NO_FATAL_FAILURE(startBitPerfectOutput());
 
     // When bit-perfect playback is active, the system sound will be routed to bit-perfect output.
@@ -4867,12 +4861,6 @@ class AudioPolicyManagerTestBitPerfectPhoneMode : public AudioPolicyManagerTestB
 };
 
 TEST_P(AudioPolicyManagerTestBitPerfectPhoneMode, RejectBitPerfectWhenPhoneModeIsNotNormal) {
-    if (!com::android::media::audioserver::
-            fix_concurrent_playback_behavior_with_bit_perfect_client()) {
-        GTEST_SKIP()
-                << "Flag fix_concurrent_playback_behavior_with_bit_perfect_client is not enabled";
-    }
-
     ASSERT_NO_FATAL_FAILURE(startBitPerfectOutput());
 
     audio_mode_t mode = GetParam();
@@ -4902,12 +4890,6 @@ class AudioPolicyManagerTestBitPerfectHigherPriorityUseCaseActive :
 
 TEST_P(AudioPolicyManagerTestBitPerfectHigherPriorityUseCaseActive,
        RejectBitPerfectWhenHigherPriorityUseCaseIsActive) {
-    if (!com::android::media::audioserver::
-                fix_concurrent_playback_behavior_with_bit_perfect_client()) {
-        GTEST_SKIP()
-                << "Flag fix_concurrent_playback_behavior_with_bit_perfect_client is not enabled";
-    }
-
     ASSERT_NO_FATAL_FAILURE(startBitPerfectOutput());
 
     audio_attributes_t attr = {
