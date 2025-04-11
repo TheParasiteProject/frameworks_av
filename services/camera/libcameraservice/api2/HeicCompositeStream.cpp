@@ -184,6 +184,8 @@ status_t HeicCompositeStream::createInternalStreams(const std::vector<SurfaceHol
     if ((dataspace == static_cast<int>(kUltraHDRDataSpace)) && flags::camera_heif_gainmap()) {
         mHDRGainmapEnabled = true;
         mInternalDataSpace = static_cast<android_dataspace_t>(HAL_DATASPACE_BT2020_HLG);
+        // APP segment and P010 streams may not be supported on all devices
+        mAppSegmentSupported = false;
     }
 
     res = initializeCodec(width, height, device);
