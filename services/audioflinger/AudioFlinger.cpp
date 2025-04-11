@@ -3365,6 +3365,11 @@ void AudioFlinger::closeThreadInternal_l(const sp<IAfPlaybackThread>& thread)
 
 status_t AudioFlinger::suspendOutput(audio_io_handle_t output)
 {
+    if (audioserver_flags::remove_stream_suspend()) {
+        LOG_ALWAYS_FATAL("%s should not be called with remove_stream_suspend flag enabled",
+                         __func__);
+        return INVALID_OPERATION;
+    }
     audio_utils::lock_guard _l(mutex());
     IAfPlaybackThread* const thread = checkPlaybackThread_l(output);
 
@@ -3380,6 +3385,12 @@ status_t AudioFlinger::suspendOutput(audio_io_handle_t output)
 
 status_t AudioFlinger::restoreOutput(audio_io_handle_t output)
 {
+    if (audioserver_flags::remove_stream_suspend()) {
+        LOG_ALWAYS_FATAL("%s should not be called with remove_stream_suspend flag enabled",
+                         __func__);
+        return INVALID_OPERATION;
+    }
+
     audio_utils::lock_guard _l(mutex());
     IAfPlaybackThread* const thread = checkPlaybackThread_l(output);
 
