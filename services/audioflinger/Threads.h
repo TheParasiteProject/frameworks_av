@@ -643,7 +643,8 @@ protected:
                     std::vector<playback_track_metadata_v7_t> playbackMetadataUpdate;
                     std::vector<record_track_metadata_v7_t>   recordMetadataUpdate;
                 };
-    // NO_THREAD_SAFETY_ANALYSIS, updateMetadata_l() should include ThreadBase_ThreadLoop
+    // NO_THREAD_SAFETY_ANALYSIS, the ThreadBase::updateMetadata_l()
+    // should include ThreadBase_ThreadLoop
     // but MmapThread::start() -> exitStandby_l() -> updateMetadata_l() prevents this.
     virtual MetadataUpdate updateMetadata_l() REQUIRES(mutex()) = 0;
 
@@ -1472,9 +1473,9 @@ protected:
     std::set<audio_port_handle_t> getTrackPortIds();
 
     void readOutputParameters_l() REQUIRES(mutex());
-    MetadataUpdate updateMetadata_l() final REQUIRES(mutex());
+    MetadataUpdate updateMetadata_l() final REQUIRES(mutex(), ThreadBase_ThreadLoop);
     virtual void sendMetadataToBackend_l(const StreamOutHalInterface::SourceMetadata& metadata)
-            REQUIRES(mutex()) ;
+            REQUIRES(mutex(), ThreadBase_ThreadLoop);
 
     void collectTimestamps_l() REQUIRES(mutex(), ThreadBase_ThreadLoop);
 
@@ -1917,7 +1918,8 @@ public:
     uint32_t waitTimeMs() const final { return mWaitTimeMs; }
 
                 void        sendMetadataToBackend_l(
-            const StreamOutHalInterface::SourceMetadata& metadata) final REQUIRES(mutex());
+            const StreamOutHalInterface::SourceMetadata& metadata) final
+            REQUIRES(mutex(), ThreadBase_ThreadLoop);
 protected:
     virtual     uint32_t    activeSleepTimeUs() const;
     void dumpInternals_l(int fd, const Vector<String16>& args) final REQUIRES(mutex());
@@ -1942,9 +1944,10 @@ protected:
 private:
 
                 uint32_t    mWaitTimeMs;
-    // NO_THREAD_SAFETY_ANALYSIS  GUARDED_BY(ThreadBase_ThreadLoop)
-    SortedVector <sp<IAfOutputTrack>> outputTracks;
-    SortedVector <sp<IAfOutputTrack>> mOutputTracks GUARDED_BY(mutex());
+
+    // tlOutputTracks is a copy of mOutputTracks accessed only by the worker thread.
+    std::set<sp<IAfOutputTrack>> tlOutputTracks GUARDED_BY(ThreadBase_ThreadLoop);
+    std::set<sp<IAfOutputTrack>> mOutputTracks GUARDED_BY(mutex());
 public:
     virtual     bool        hasFastMixer() const { return false; }
                 status_t    threadloop_getHalTimestamp_l(
@@ -1952,7 +1955,7 @@ public:
         if (mOutputTracks.size() > 0) {
             // forward the first OutputTrack's kernel information for timestamp.
             const ExtendedTimestamp trackTimestamp =
-                    mOutputTracks[0]->getClientProxyTimestamp();
+                    (*mOutputTracks.begin())->getClientProxyTimestamp();
             if (trackTimestamp.mTimeNs[ExtendedTimestamp::LOCATION_KERNEL] > 0) {
                 timestamp->mTimeNs[ExtendedTimestamp::LOCATION_KERNEL] =
                         trackTimestamp.mTimeNs[ExtendedTimestamp::LOCATION_KERNEL];
@@ -2120,7 +2123,7 @@ public:
             EXCLUDES_ThreadBase_Mutex;
     status_t setPreferredMicrophoneFieldDimension(float zoom) final EXCLUDES_ThreadBase_Mutex;
 
-    MetadataUpdate updateMetadata_l() override REQUIRES(mutex());
+    MetadataUpdate updateMetadata_l() override REQUIRES(mutex(), ThreadBase_ThreadLoop);
 
     bool fastTrackAvailable() const final { return mFastTrackAvail; }
     void setFastTrackAvailable(bool available) final { mFastTrackAvail = available; }

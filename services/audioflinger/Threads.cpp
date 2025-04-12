@@ -7800,8 +7800,8 @@ DuplicatingThread::DuplicatingThread(const sp<IAfThreadCallback>& afThreadCallba
 
 DuplicatingThread::~DuplicatingThread()
 {
-    for (size_t i = 0; i < mOutputTracks.size(); i++) {
-        mOutputTracks[i]->destroy();
+    for (const auto& track : mOutputTracks) {
+        track->destroy();
     }
 }
 
@@ -7846,20 +7846,22 @@ void DuplicatingThread::threadLoop_sleepTime()
 ssize_t DuplicatingThread::threadLoop_write()
 {
     ATRACE_BEGIN("write");
-    for (size_t i = 0; i < outputTracks.size(); i++) {
-        const ssize_t actualWritten = outputTracks[i]->write(mSinkBuffer, writeFrames);
+    bool first = true;
+    for (const auto& t : tlOutputTracks) {
+        const ssize_t actualWritten = t->write(mSinkBuffer, writeFrames);
 
         // Consider the first OutputTrack for timestamp and frame counting.
 
         // The threadLoop() generally assumes writing a full sink buffer size at a time.
         // Here, we correct for writeFrames of 0 (a stop) or underruns because
         // we always claim success.
-        if (i == 0) {
+        if (first) {
             const ssize_t correction = mSinkBufferSize / mFrameSize - actualWritten;
             ALOGD_IF(correction != 0 && writeFrames != 0,
                     "%s: writeFrames:%u  actualWritten:%zd  correction:%zd  mFramesWritten:%lld",
                     __func__, writeFrames, actualWritten, correction, (long long)mFramesWritten);
             mFramesWritten -= correction;
+            first = false;
         }
 
         // TODO: Report correction for the other output tracks and show in the dump.
@@ -7876,8 +7878,8 @@ ssize_t DuplicatingThread::threadLoop_write()
 void DuplicatingThread::threadLoop_standby()
 {
     // DuplicatingThread implements standby by stopping all tracks
-    for (size_t i = 0; i < outputTracks.size(); i++) {
-        outputTracks[i]->stop();
+    for (const auto& track : tlOutputTracks) {
+        track->stop();
     }
 }
 
@@ -7887,17 +7889,17 @@ void DuplicatingThread::threadLoop_exit()
     // where other mutexes (i.e. AudioPolicyService_Mutex) may be held.
     // Do so here in the threadLoop_exit().
 
-    SortedVector <sp<IAfOutputTrack>> localTracks;
+    std::set<sp<IAfOutputTrack>> localTracks;
     {
         audio_utils::lock_guard l(mutex());
         localTracks = std::move(mOutputTracks);
         mOutputTracks.clear();
-        for (size_t i = 0; i < localTracks.size(); ++i) {
-            localTracks[i]->destroy();
+        for (const auto& track : localTracks) {
+            track->destroy();
         }
     }
     localTracks.clear();
-    outputTracks.clear();
+    tlOutputTracks.clear();
     PlaybackThread::threadLoop_exit();
 }
 
@@ -7928,12 +7930,12 @@ void DuplicatingThread::dumpInternals_l(int fd, const Vector<String16>& args)
 
 void DuplicatingThread::saveOutputTracks()
 {
-    outputTracks = mOutputTracks;
+    tlOutputTracks = mOutputTracks;
 }
 
 void DuplicatingThread::clearOutputTracks()
 {
-    outputTracks.clear();
+    tlOutputTracks.clear();
 }
 
 void DuplicatingThread::addOutputTrack(IAfPlaybackThread* thread)
@@ -7971,7 +7973,7 @@ void DuplicatingThread::addOutputTrack(IAfPlaybackThread* thread)
         thread->setStreamVolume(AUDIO_STREAM_PATCH, /*volume=*/1.0f, /*muted=*/false);
     }
 
-    mOutputTracks.add(outputTrack);
+    mOutputTracks.emplace(outputTrack);
     ALOGV("addOutputTrack() track %p, on thread %p", outputTrack.get(), thread);
     updateWaitTime_l();
 }
@@ -7979,10 +7981,10 @@ void DuplicatingThread::addOutputTrack(IAfPlaybackThread* thread)
 void DuplicatingThread::removeOutputTrack(IAfPlaybackThread* thread)
 {
     audio_utils::lock_guard _l(mutex());
-    for (size_t i = 0; i < mOutputTracks.size(); i++) {
-        if (mOutputTracks[i]->thread() == thread) {
-            mOutputTracks[i]->destroy();
-            mOutputTracks.removeAt(i);
+    for (const auto& track : mOutputTracks) {
+        if (track->thread() == thread) {
+            track->destroy();
+            mOutputTracks.erase(track);  // OK to erase as we return afterwards.
             updateWaitTime_l();
             // NO_THREAD_SAFETY_ANALYSIS
             // Lambda workaround: as thread != this
@@ -8003,8 +8005,8 @@ void DuplicatingThread::updateWaitTime_l()
 {
     // Initialize mWaitTimeMs according to the mixer buffer size.
     mWaitTimeMs = mNormalFrameCount * 2 * 1000 / mSampleRate;
-    for (size_t i = 0; i < mOutputTracks.size(); i++) {
-        const auto strong = mOutputTracks[i]->thread().promote();
+    for (const auto& track : mOutputTracks) {
+        const auto strong = track->thread().promote();
         if (strong != 0) {
             uint32_t waitTimeMs = (strong->frameCount() * 2 * 1000) / strong->sampleRate();
             if (waitTimeMs < mWaitTimeMs) {
@@ -8016,17 +8018,17 @@ void DuplicatingThread::updateWaitTime_l()
 
 bool DuplicatingThread::outputsReady()
 {
-    for (size_t i = 0; i < outputTracks.size(); i++) {
-        const auto thread = outputTracks[i]->thread().promote();
+    for (const auto& track : tlOutputTracks) {
+        const auto thread = track->thread().promote();
         if (thread == 0) {
             ALOGW("DuplicatingThread::outputsReady() could not promote thread on output track %p",
-                    outputTracks[i].get());
+                    track.get());
             return false;
         }
         IAfPlaybackThread* const playbackThread = thread->asIAfPlaybackThread().get();
         // see note at standby() declaration
         if (playbackThread->inStandby() && !playbackThread->isSuspended()) {
-            ALOGV("DuplicatingThread output track %p on thread %p Not Ready", outputTracks[i].get(),
+            ALOGV("DuplicatingThread output track %p on thread %p Not Ready", track.get(),
                     thread.get());
             return false;
         }
@@ -8037,7 +8039,7 @@ bool DuplicatingThread::outputsReady()
 void DuplicatingThread::sendMetadataToBackend_l(
         const StreamOutHalInterface::SourceMetadata& metadata)
 {
-    for (auto& outputTrack : outputTracks) { // not mOutputTracks
+    for (auto& outputTrack : tlOutputTracks) { // not mOutputTracks
         outputTrack->setMetadatas(metadata.tracks);
     }
 }
