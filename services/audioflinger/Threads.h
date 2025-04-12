@@ -593,7 +593,7 @@ protected:
     virtual void acquireWakeLock_l() REQUIRES(mutex());
     void releaseWakeLock() EXCLUDES_ThreadBase_Mutex;
     void releaseWakeLock_l() REQUIRES(mutex());
-    void updateWakeLockUids_l(const SortedVector<uid_t> &uids) REQUIRES(mutex());
+    void updateWakeLockUids_l(const std::vector<uid_t>& uids) REQUIRES(mutex());
     void getPowerManager_l() REQUIRES(mutex());
                 // suspend or restore effects of the specified type (or all if type is NULL)
                 // on a given session. The number of suspend requests is counted and restore
@@ -871,10 +871,10 @@ protected:
                 private:
                     void logTrack(const char* funcName, const sp<IAfTrackBase>& track) const;
 
-                    SortedVector<uid_t> getWakeLockUids() {
-                        SortedVector<uid_t> wakeLockUids;
+                    std::vector<uid_t> getWakeLockUids() {
+                        std::vector<uid_t> wakeLockUids;
                         for (const auto& track : mActiveTracks) {
-                            wakeLockUids.add(track->uid());
+                            wakeLockUids.push_back(track->uid());
                         }
                         return wakeLockUids; // moved by underlying SharedBuffer
                     }
