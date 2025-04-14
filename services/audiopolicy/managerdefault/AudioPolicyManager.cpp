@@ -2657,8 +2657,8 @@ status_t AudioPolicyManager::startSource(const sp<SwAudioOutputDescriptor>& outp
         auto &curves = getVolumeCurves(client->attributes());
         if (NO_ERROR != checkAndSetVolume(curves, client->volumeSource(),
                           curves.getVolumeIndex(outputDesc->devices().types()),
-                          outputDesc, outputDesc->devices().types(), 0 /*delay*/,
-                          outputDesc->useHwGain() /*force*/)) {
+                          outputDesc, outputDesc->devices().types(), true /*adjustAttenuation*/,
+                          0 /*delay*/, outputDesc->useHwGain() /*force*/)) {
             // request AudioService to reinitialize the volume curves asynchronously
             ALOGE("checkAndSetVolume failed, requesting volume range init");
             mpClientInterface->onVolumeRangeInitRequest();
