@@ -509,6 +509,7 @@ status_t MmapStreamInterface::openMmapStream(MmapStreamInterface::stream_directi
                                              DeviceIdVector *deviceIds,
                                              audio_session_t *sessionId,
                                              const sp<MmapStreamCallback>& callback,
+                                             const audio_offload_info_t* offloadInfo,
                                              sp<MmapStreamInterface>& interface,
                                              audio_port_handle_t *handle)
 {
@@ -519,7 +520,7 @@ status_t MmapStreamInterface::openMmapStream(MmapStreamInterface::stream_directi
     if (af != 0) {
         ret = af->openMmapStream(
                 direction, attr, config, client, deviceIds,
-                sessionId, callback, interface, handle);
+                sessionId, callback, offloadInfo, interface, handle);
     }
     return ret;
 }
@@ -531,6 +532,7 @@ status_t AudioFlinger::openMmapStream(MmapStreamInterface::stream_direction_t di
                                       DeviceIdVector *deviceIds,
                                       audio_session_t *sessionId,
                                       const sp<MmapStreamCallback>& callback,
+                                      const audio_offload_info_t* offloadInfo,
                                       sp<MmapStreamInterface>& interface,
                                       audio_port_handle_t *handle)
 {
@@ -595,12 +597,17 @@ status_t AudioFlinger::openMmapStream(MmapStreamInterface::stream_direction_t di
         bool isBitPerfect;
         float volume;
         bool muted;
+        audio_output_flags_t flags = static_cast<audio_output_flags_t>(
+                AUDIO_OUTPUT_FLAG_MMAP_NOIRQ | AUDIO_OUTPUT_FLAG_DIRECT);
+        if (offloadInfo != nullptr) {
+            flags = static_cast<audio_output_flags_t>(flags | AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD);
+            fullConfig.offload_info = *offloadInfo;
+        }
         ret = AudioSystem::getOutputForAttr(&localAttr, &io,
                                             actualSessionId,
                                             &streamType, adjAttributionSource,
                                             &fullConfig,
-                                            (audio_output_flags_t)(AUDIO_OUTPUT_FLAG_MMAP_NOIRQ |
-                                                    AUDIO_OUTPUT_FLAG_DIRECT),
+                                            flags,
                                             deviceIds, &portId, &secondaryOutputs,
                                             &isSpatialized,
                                             &isBitPerfect,
