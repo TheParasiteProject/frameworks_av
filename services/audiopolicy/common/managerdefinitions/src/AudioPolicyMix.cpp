@@ -193,11 +193,9 @@ status_t AudioPolicyMixCollection::registerMix(const AudioMix& mix,
                     mix.mDeviceType, mix.mDeviceAddress.c_str());
             return BAD_VALUE;
         }
-        if (audiopolicy_flags::audio_mix_ownership()) {
-            if (mix.mToken == registeredMix->mToken) {
-                ALOGE("registerMix(): same mix already registered - skipping");
-                return BAD_VALUE;
-            }
+        if (mix.mToken == registeredMix->mToken) {
+            ALOGE("registerMix(): same mix already registered - skipping");
+            return BAD_VALUE;
         }
     }
     if (!areMixCriteriaConsistent(mix.mCriteria)) {
@@ -221,21 +219,11 @@ status_t AudioPolicyMixCollection::unregisterMix(const AudioMix& mix)
 {
     for (size_t i = 0; i < size(); i++) {
         const sp<AudioPolicyMix>& registeredMix = itemAt(i);
-        if (audiopolicy_flags::audio_mix_ownership()) {
-            if (mix.mToken == registeredMix->mToken) {
-                ALOGD("unregisterMix(): removing mix for dev=0x%x addr=%s",
-                      mix.mDeviceType, mix.mDeviceAddress.c_str());
-                removeAt(i);
-                return NO_ERROR;
-            }
-        } else {
-            if (mix.mDeviceType == registeredMix->mDeviceType
-                && mix.mDeviceAddress.compare(registeredMix->mDeviceAddress) == 0) {
-                ALOGD("unregisterMix(): removing mix for dev=0x%x addr=%s",
-                      mix.mDeviceType, mix.mDeviceAddress.c_str());
-                removeAt(i);
-                return NO_ERROR;
-            }
+        if (mix.mToken == registeredMix->mToken) {
+            ALOGD("unregisterMix(): removing mix for dev=0x%x addr=%s",
+                  mix.mDeviceType, mix.mDeviceAddress.c_str());
+            removeAt(i);
+            return NO_ERROR;
         }
     }
 

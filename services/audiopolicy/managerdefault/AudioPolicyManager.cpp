@@ -4291,14 +4291,10 @@ status_t AudioPolicyManager::registerPolicyMixes(const Vector<AudioMix>& mixes)
         }
     }
     if (res != NO_ERROR) {
-        if (audio_flags::audio_mix_ownership()) {
-            // Only unregister mixes that were actually registered to not accidentally unregister
-            // mixes that already existed previously.
-            unregisterPolicyMixes(registeredMixes);
-            registeredMixes.clear();
-        } else {
-            unregisterPolicyMixes(mixes);
-        }
+        // Only unregister mixes that were actually registered to not accidentally unregister
+        // mixes that already existed previously.
+        unregisterPolicyMixes(registeredMixes);
+        registeredMixes.clear();
     } else if (checkOutputs) {
         checkForDeviceAndOutputChanges();
         changeOutputDevicesMuteState(devices);
@@ -4345,9 +4341,6 @@ status_t AudioPolicyManager::unregisterPolicyMixes(Vector<AudioMix> mixes)
                                                         address.c_str(),
                                                         "remote-submix",
                                                         AUDIO_FORMAT_DEFAULT);
-                    if (!audio_flags::audio_mix_ownership()) {
-                        res = currentRes;
-                    }
                     if (currentRes != OK) {
                         ALOGE("Error making RemoteSubmix device unavailable for mix "
                               "with type %d, address %s", device, address.c_str());
