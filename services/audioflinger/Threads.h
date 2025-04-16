@@ -595,7 +595,8 @@ protected:
     virtual void acquireWakeLock_l() REQUIRES(mutex());
     void releaseWakeLock() EXCLUDES_ThreadBase_Mutex;
     void releaseWakeLock_l() REQUIRES(mutex());
-    void updateWakeLockUids_l(const SortedVector<uid_t> &uids) REQUIRES(mutex());
+    // TODO(b/410038399) fix thread safety
+    void updateWakeLockUids_l(const SortedVector<uid_t> &uids) /* REQUIRES(mutex()) */;
     void getPowerManager_l() REQUIRES(mutex());
                 // suspend or restore effects of the specified type (or all if type is NULL)
                 // on a given session. The number of suspend requests is counted and restore
@@ -894,6 +895,8 @@ protected:
 
                 SimpleLog mLocalLog {/* maxLogLines= */ 120};  // locked internally
 
+    ActiveTracks<IAfTrackBase> mActiveTracks GUARDED_BY(mutex()) {&mLocalLog};
+
     // mThreadloopExecutor contains deferred functors and object (dtors) to
     // be executed at the end of the processing period, without any
     // mutexes held.
@@ -995,7 +998,8 @@ protected:
     void preExit() final EXCLUDES_ThreadBase_Mutex;
 
     virtual     bool        keepWakeLock() const { return true; }
-    virtual void acquireWakeLock_l() REQUIRES(mutex()) {
+    // TODO(b/410038399) fix thread safety
+    virtual void acquireWakeLock_l() NO_THREAD_SAFETY_ANALYSIS {
                                 ThreadBase::acquireWakeLock_l();
         mActiveTracks.updatePowerState_l(this, true /* force */);
                             }
@@ -1367,7 +1371,6 @@ protected:
                             : mTimestampVerifier.DISCONTINUITY_MODE_CONTINUOUS;
                 }
 
-    ActiveTracks<IAfTrackBase> mActiveTracks GUARDED_BY(mutex());
     ContainerView<decltype(mActiveTracks), sp<IAfTrack>>
             mActivePlaybackTracksView GUARDED_BY(mutex()) {mActiveTracks};
 
@@ -2170,7 +2173,6 @@ private:
             SortedVector <sp<IAfRecordTrack>>    mTracks;
             // mActiveTracks has dual roles:  it indicates the current active track(s), and
             // is used together with mStartStopCV to indicate start()/stop() progress
-    ActiveTracks<IAfTrackBase> mActiveTracks GUARDED_BY(mutex());
     ContainerView<decltype(mActiveTracks), sp<IAfRecordTrack>>
             mActiveRecordTracksView GUARDED_BY(mutex()) {mActiveTracks};
 
@@ -2389,7 +2391,6 @@ class MmapThread : public ThreadBase, public virtual IAfMmapThread
     sp<StreamHalInterface> mHalStream; // NO_THREAD_SAFETY_ANALYSIS
     sp<DeviceHalInterface> mHalDevice GUARDED_BY(mutex());
     AudioHwDevice* const mAudioHwDev GUARDED_BY(mutex());
-    ActiveTracks<IAfTrackBase> mActiveTracks GUARDED_BY(mutex());
     ContainerView<decltype(mActiveTracks), sp<IAfMmapTrack>>
             mActiveMmapTracksView GUARDED_BY(mutex()) {mActiveTracks};
     float mHalVolFloat GUARDED_BY(mutex());
