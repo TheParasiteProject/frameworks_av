@@ -374,10 +374,11 @@ status_t AudioFlinger::updateSecondaryOutputs(
         for (; i < mPlaybackThreads.size(); ++i) {
             IAfPlaybackThread* thread = mPlaybackThreads.valueAt(i).get();
             audio_utils::lock_guard _tl(thread->mutex());
-            sp<IAfTrack> track = thread->getTrackById_l(trackId);
+            sp<IAfTrackBase> track = thread->getTrackById_l(trackId);
             if (track != nullptr) {
                 ALOGD("%s trackId: %u", __func__, trackId);
-                updateSecondaryOutputsForTrack_l(track.get(), thread, secondaryOutputs);
+                updateSecondaryOutputsForTrack_l(
+                        track->asIAfTrack(), thread, secondaryOutputs);
                 break;
             }
         }
@@ -1211,7 +1212,7 @@ status_t AudioFlinger::createTrack(const media::CreateTrackRequest& _input,
             // Connect secondary outputs. Failure on a secondary output must not imped the primary
             // Any secondary output setup failure will lead to a desync between the AP and AF until
             // the track is destroyed.
-            updateSecondaryOutputsForTrack_l(track.get(), thread, secondaryOutputs);
+            updateSecondaryOutputsForTrack_l(track, thread, secondaryOutputs);
             // move effect chain to this output thread if an effect on same session was waiting
             // for a track to be created
             if (effectThread != nullptr) {
@@ -4021,7 +4022,7 @@ IAfThreadBase* AudioFlinger::hapticPlaybackThread_l() const {
 }
 
 void AudioFlinger::updateSecondaryOutputsForTrack_l(
-        IAfTrack* track,
+        const sp<IAfTrack>& track,
         IAfPlaybackThread* thread,
         const std::vector<audio_io_handle_t> &secondaryOutputs) const {
     TeePatches teePatches;

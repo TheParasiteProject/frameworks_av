@@ -795,8 +795,9 @@ protected:
                 // This class updates power information appropriately.
                 //
 
-                template <typename T>
                 class ActiveTracks {
+                    // TODO(b/410038399) clean up types
+                    using T = IAfTrackBase;
                 public:
                     explicit ActiveTracks(SimpleLog *localLog = nullptr)
                         : mActiveTracksGeneration(0)
@@ -859,8 +860,9 @@ protected:
                     // ThreadBase thread.
                     void            clear();
                     // periodically called in the threadLoop() to update power state uids.
+                    // TODO(b/410038399) fix thread safety
                     void updatePowerState_l(const sp<ThreadBase>& thread, bool force = false)
-                            REQUIRES(audio_utils::ThreadBase_Mutex);
+                           /* REQUIRES(audio_utils::ThreadBase_Mutex) */;
 
                     /** @return true if one or move active tracks was added or removed since the
                      *          last time this function was called or the vector was created.
@@ -895,7 +897,69 @@ protected:
 
                 SimpleLog mLocalLog {/* maxLogLines= */ 120};  // locked internally
 
-    ActiveTracks<IAfTrackBase> mActiveTracks GUARDED_BY(mutex()) {&mLocalLog};
+    ActiveTracks mActiveTracks GUARDED_BY(mutex()) {&mLocalLog};
+
+        // The Tracks class manages tracks added and removed from the Thread.
+
+    class Tracks {
+        using T = IAfTrackBase;
+    public:
+        explicit Tracks(bool saveDeletedTrackIds) :
+                mSaveDeletedTrackIds(saveDeletedTrackIds) { }
+
+        // SortedVector methods
+        ssize_t add(const sp<T>& track) {
+            const ssize_t index = mTracks.add(track);
+            LOG_ALWAYS_FATAL_IF(index < 0, "cannot add track");
+            return index;
+        }
+        ssize_t remove(const sp<T>& track);
+        size_t size() const {
+            return mTracks.size();
+        }
+        bool isEmpty() const {
+            return mTracks.isEmpty();
+        }
+        ssize_t indexOf(const sp<T>& item) {
+            return mTracks.indexOf(item);
+        }
+        sp<T> operator[](size_t index) const {
+            return mTracks[index];
+        }
+        SortedVector<sp<T>>::iterator begin() {
+            return mTracks.begin();
+        }
+        SortedVector<sp<T>>::iterator end() {
+            return mTracks.end();
+        }
+        SortedVector<const sp<T>>::iterator begin() const {
+            return mTracks.begin();
+        }
+        SortedVector<const sp<T>>::iterator end() const  {
+            return mTracks.end();
+        }
+        size_t processDeletedTrackIds(const std::function<void(int)>& f) {
+            for (const int trackId : mDeletedTrackIds) {
+                f(trackId);
+            }
+            return mDeletedTrackIds.size();
+        }
+        void clearDeletedTrackIds() { mDeletedTrackIds.clear(); }
+
+    private:
+        // Tracks pending deletion for MIXER type threads
+        const bool mSaveDeletedTrackIds; // true to enable tracking
+        std::set<int> mDeletedTrackIds;
+
+        SortedVector<sp<T>> mTracks; // wrapped SortedVector.
+    };
+
+    // TODO(b/410038399) should be any mixer enabled thread.
+    Tracks mTracks{mType == MIXER};
+
+    sp<IAfTrackBase> getTrackById_l(audio_port_handle_t trackId) final REQUIRES(mutex());
+
+    std::vector<sp<IAfTrackBase>> getTracks_l() final REQUIRES(mutex());
 
     // mThreadloopExecutor contains deferred functors and object (dtors) to
     // be executed at the end of the processing period, without any
@@ -1186,10 +1250,6 @@ public:
                     mDownStreamPatch = *patch;
                 }
 
-    IAfTrack* getTrackById_l(audio_port_handle_t trackId) final REQUIRES(mutex());
-
-    std::vector<sp<IAfTrack>> getTracks_l() final REQUIRES(mutex());
-
     bool hasMixer() const final {
                     return mType == MIXER || mType == DUPLICATING || mType == SPATIALIZER;
                 }
@@ -1373,6 +1433,8 @@ protected:
 
     ContainerView<decltype(mActiveTracks), sp<IAfTrack>>
             mActivePlaybackTracksView GUARDED_BY(mutex()) {mActiveTracks};
+    ContainerView<decltype(mTracks), sp<IAfTrack>>
+            mPlaybackTracksView GUARDED_BY(mutex()) {mTracks};
 
     // Time to sleep between cycles when:
     virtual uint32_t        activeSleepTimeUs() const;      // mixer state MIXER_TRACKS_ENABLED
@@ -1430,58 +1492,6 @@ protected:
             REQUIRES(mutex()) ;
 
     void collectTimestamps_l() REQUIRES(mutex(), ThreadBase_ThreadLoop);
-
-    // The Tracks class manages tracks added and removed from the Thread.
-    template <typename T>
-    class Tracks {
-    public:
-        explicit Tracks(bool saveDeletedTrackIds) :
-            mSaveDeletedTrackIds(saveDeletedTrackIds) { }
-
-        // SortedVector methods
-        ssize_t         add(const sp<T> &track) {
-            const ssize_t index = mTracks.add(track);
-            LOG_ALWAYS_FATAL_IF(index < 0, "cannot add track");
-            return index;
-        }
-        ssize_t         remove(const sp<T> &track);
-        size_t          size() const {
-            return mTracks.size();
-        }
-        bool            isEmpty() const {
-            return mTracks.isEmpty();
-        }
-        ssize_t         indexOf(const sp<T> &item) {
-            return mTracks.indexOf(item);
-        }
-        sp<T>           operator[](size_t index) const {
-            return mTracks[index];
-        }
-        typename SortedVector<sp<T>>::iterator begin() {
-            return mTracks.begin();
-        }
-        typename SortedVector<sp<T>>::iterator end() {
-            return mTracks.end();
-        }
-
-        size_t          processDeletedTrackIds(const std::function<void(int)>& f) {
-            for (const int trackId : mDeletedTrackIds) {
-                f(trackId);
-            }
-            return mDeletedTrackIds.size();
-        }
-
-        void            clearDeletedTrackIds() { mDeletedTrackIds.clear(); }
-
-    private:
-        // Tracks pending deletion for MIXER type threads
-        const bool mSaveDeletedTrackIds; // true to enable tracking
-        std::set<int> mDeletedTrackIds;
-
-        SortedVector<sp<T>> mTracks; // wrapped SortedVector.
-    };
-
-    Tracks<IAfTrack>                   mTracks;
 
     stream_type_t                   mStreamTypes[AUDIO_STREAM_CNT];
 
@@ -2170,11 +2180,12 @@ private:
 
             AudioStreamIn                       *mInput;
             Source                              *mSource;
-            SortedVector <sp<IAfRecordTrack>>    mTracks;
             // mActiveTracks has dual roles:  it indicates the current active track(s), and
             // is used together with mStartStopCV to indicate start()/stop() progress
     ContainerView<decltype(mActiveTracks), sp<IAfRecordTrack>>
             mActiveRecordTracksView GUARDED_BY(mutex()) {mActiveTracks};
+    ContainerView<decltype(mTracks), sp<IAfRecordTrack>>
+            mRecordTracksView GUARDED_BY(mutex()) {mTracks};
 
             audio_utils::condition_variable mStartStopCV;
 
