@@ -480,8 +480,7 @@ public:
                     if (getEffectChain_l(sessionId) != 0) {
                         result = EFFECT_SESSION;
                     }
-                    for (size_t i = 0; i < tracks.size(); ++i) {
-                        const sp<IAfTrackBase>& track = tracks[i];
+                    for (const auto& track : tracks) {
                         if (sessionId == track->sessionId()
                                 && !track->isInvalid()       // not yet removed from tracks.
                                 && !track->isTerminated()) {
@@ -560,8 +559,7 @@ public:
                 template <typename T>
     void invalidateTracksForAudioSession_l(audio_session_t sessionId,
             const T& tracks) const REQUIRES(mutex()) {
-                    for (size_t i = 0; i < tracks.size(); ++i) {
-                        const sp<IAfTrackBase>& track = tracks[i];
+                    for (const auto& track : tracks) {
                         if (sessionId == track->sessionId()) {
                             track->invalidate();
                         }
@@ -823,32 +821,33 @@ protected:
                     sp<T> getLatest() {
                         return mLatestActiveTrack.promote();
                     }
-
-                    // SortedVector methods
                     ssize_t         add(const sp<T> &track);
                     ssize_t         remove(const sp<T> &track);
-                    size_t          size() const {
+                    size_t size() const {
                         return mActiveTracks.size();
                     }
-                    bool            isEmpty() const {
+                    bool empty() const {
                         return mActiveTracks.isEmpty();
                     }
-                    ssize_t indexOf(const sp<T>& item) const {
-                        return mActiveTracks.indexOf(item);
+                    size_t count(const sp<T>& track) const {
+                        for (const sp<T> &t : mActiveTracks) {
+                            if (track == t) return 1;
+                        }
+                        return 0;
                     }
-                    sp<T>           operator[](size_t index) const {
-                        return mActiveTracks[index];
+                    SortedVector<sp<T>>::iterator erase(const SortedVector<sp<T>>::iterator& it) {
+                        return mActiveTracks.erase(it);
                     }
-                    typename SortedVector<sp<T>>::iterator begin() {
+                    SortedVector<sp<T>>::iterator begin() {
                         return mActiveTracks.begin();
                     }
-                    typename SortedVector<sp<T>>::iterator end() {
+                    SortedVector<sp<T>>::iterator end() {
                         return mActiveTracks.end();
                     }
-                    typename SortedVector<const sp<T>>::iterator begin() const {
+                    SortedVector<const sp<T>>::iterator begin() const {
                         return mActiveTracks.begin();
                     }
-                    typename SortedVector<const sp<T>>::iterator end() const {
+                    SortedVector<const sp<T>>::iterator end() const {
                         return mActiveTracks.end();
                     }
 
@@ -917,14 +916,14 @@ protected:
         size_t size() const {
             return mTracks.size();
         }
-        bool isEmpty() const {
+        bool empty() const {
             return mTracks.isEmpty();
         }
-        ssize_t indexOf(const sp<T>& item) {
-            return mTracks.indexOf(item);
-        }
-        sp<T> operator[](size_t index) const {
-            return mTracks[index];
+        size_t count(const sp<T>& track) const {
+            for (const sp<T> &t : mTracks) {
+                if (track == t) return 1;
+            }
+            return 0;
         }
         SortedVector<sp<T>>::iterator begin() {
             return mTracks.begin();
@@ -1126,7 +1125,7 @@ public:
             REQUIRES(audio_utils::AudioFlinger_Mutex);
 
     bool isTrackActive_l(const sp<IAfTrack>& track) const final REQUIRES(mutex()) {
-        return mActiveTracks.indexOf(track) >= 0;
+        return mActiveTracks.count(track) > 0;
     }
 
     AudioStreamOut* getOutput_l() const final REQUIRES(mutex()) { return mOutput; }
