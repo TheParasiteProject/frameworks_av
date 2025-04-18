@@ -1271,8 +1271,7 @@ void ThreadBase::getPowerManager_l() {
     }
 }
 
-// TODO(b/410038399) fix thread safety
-void ThreadBase::updateWakeLockUids_l(const SortedVector<uid_t>& uids) NO_THREAD_SAFETY_ANALYSIS {
+void ThreadBase::updateWakeLockUids_l(const SortedVector<uid_t>& uids) {
     getPowerManager_l();
 
 #if !LOG_NDEBUG
@@ -1964,25 +1963,24 @@ void ThreadBase::systemReady()
     mPendingConfigEvents.clear();
 }
 
-ssize_t ThreadBase::ActiveTracks::add(const sp<IAfTrackBase>& track) {
-    ssize_t index = mActiveTracks.indexOf(track);
-    if (index >= 0) {
+bool ThreadBase::ActiveTracks::add(const sp<IAfTrackBase>& track) {
+    if (mActiveTracks.count(track) > 0) {
         ALOGW("ActiveTracks::add track %p already there", track.get());
-        return index;
+        return false;
     }
     logTrack("add", track);
     mActiveTracksGeneration++;
     mLatestActiveTrack = track;
     track->beginBatteryAttribution();
     mHasChanged = true;
-    return mActiveTracks.add(track);
+    mActiveTracks.insert(track);
+    return true;
 }
 
-ssize_t ThreadBase::ActiveTracks::remove(const sp<IAfTrackBase>& track) {
-    ssize_t index = mActiveTracks.remove(track);
-    if (index < 0) {
+bool ThreadBase::ActiveTracks::remove(const sp<IAfTrackBase>& track) {
+    if (mActiveTracks.erase(track) == 0) {
         ALOGW("ActiveTracks::remove nonexistent track %p", track.get());
-        return index;
+        return false;
     }
     logTrack("remove", track);
     mActiveTracksGeneration++;
@@ -1993,7 +1991,7 @@ ssize_t ThreadBase::ActiveTracks::remove(const sp<IAfTrackBase>& track) {
     track->dumpTee(-1 /* fd */, "_REMOVE");
 #endif
     track->logEndInterval(); // log to MediaMetrics
-    return index;
+    return true;
 }
 
 void ThreadBase::ActiveTracks::clear() {
@@ -2007,10 +2005,8 @@ void ThreadBase::ActiveTracks::clear() {
     mLatestActiveTrack.clear();
 }
 
-// TODO(b/410038399) fix thread safety
 void ThreadBase::ActiveTracks::updatePowerState_l(
-        const sp<ThreadBase>& thread, bool force)
-        NO_THREAD_SAFETY_ANALYSIS {
+        const sp<ThreadBase>& thread, bool force) {
     // Updates ActiveTracks client uids to the thread wakelock.
     if (mActiveTracksGeneration != mLastActiveTracksGeneration || force) {
         thread->updateWakeLockUids_l(getWakeLockUids());
