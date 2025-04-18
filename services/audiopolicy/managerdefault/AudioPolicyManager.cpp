@@ -1621,6 +1621,26 @@ status_t AudioPolicyManager::openDirectOutput(audio_stream_type_t stream,
         return NAME_NOT_FOUND;
     }
 
+    // When the device declares exclusive mmap offload, it indicates compressed offload and
+    // mmap offload are mutually exclusive. If one of them is opened, reject the request of the
+    // other one.
+    if (com_android_media_audioserver_mmap_pcm_offload_support() &&
+        property_get_bool("ro.audio.mmap_offload_exclusive", false /*default_value*/) &&
+        (flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) != 0) {
+        static constexpr uint32_t kMMapOffloadFlags =
+                (AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD | AUDIO_OUTPUT_FLAG_MMAP_NOIRQ);
+        bool offloadOutputMustBeMMap = (flags & kMMapOffloadFlags) == kMMapOffloadFlags;
+        for (size_t i = 0; i < mOutputs.size(); i++) {
+            auto desc = mOutputs.valueAt(i);
+            if (desc->isOffload() && desc->isMmap() != offloadOutputMustBeMMap) {
+                ALOGD("%s, reject %soffload as %soffload is opened",
+                      __func__, (offloadOutputMustBeMMap ? "mmap " : ""),
+                      (offloadOutputMustBeMMap ? "" : "mmap "));
+                return INVALID_OPERATION;
+            }
+        }
+    }
+
     // Do not allow offloading if one non offloadable effect is enabled or MasterMono is enabled.
     // This prevents creating an offloaded track and tearing it down immediately after start
     // when audioflinger detects there is an active non offloadable effect.
