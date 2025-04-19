@@ -1271,7 +1271,7 @@ void ThreadBase::getPowerManager_l() {
     }
 }
 
-void ThreadBase::updateWakeLockUids_l(const SortedVector<uid_t>& uids) {
+void ThreadBase::updateWakeLockUids_l(const std::vector<uid_t>& uids) {
     getPowerManager_l();
 
 #if !LOG_NDEBUG
