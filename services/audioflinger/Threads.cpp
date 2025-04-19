@@ -1271,7 +1271,7 @@ void ThreadBase::getPowerManager_l() {
     }
 }
 
-void ThreadBase::updateWakeLockUids_l(const SortedVector<uid_t>& uids) {
+void ThreadBase::updateWakeLockUids_l(const std::vector<uid_t>& uids) {
     getPowerManager_l();
 
 #if !LOG_NDEBUG
@@ -1963,27 +1963,24 @@ void ThreadBase::systemReady()
     mPendingConfigEvents.clear();
 }
 
-template <typename T>
-ssize_t ThreadBase::ActiveTracks<T>::add(const sp<T>& track) {
-    ssize_t index = mActiveTracks.indexOf(track);
-    if (index >= 0) {
-        ALOGW("ActiveTracks<T>::add track %p already there", track.get());
-        return index;
+bool ThreadBase::ActiveTracks::add(const sp<IAfTrackBase>& track) {
+    if (mActiveTracks.count(track) > 0) {
+        ALOGW("ActiveTracks::add track %p already there", track.get());
+        return false;
     }
     logTrack("add", track);
     mActiveTracksGeneration++;
     mLatestActiveTrack = track;
     track->beginBatteryAttribution();
     mHasChanged = true;
-    return mActiveTracks.add(track);
+    mActiveTracks.insert(track);
+    return true;
 }
 
-template <typename T>
-ssize_t ThreadBase::ActiveTracks<T>::remove(const sp<T>& track) {
-    ssize_t index = mActiveTracks.remove(track);
-    if (index < 0) {
-        ALOGW("ActiveTracks<T>::remove nonexistent track %p", track.get());
-        return index;
+bool ThreadBase::ActiveTracks::remove(const sp<IAfTrackBase>& track) {
+    if (mActiveTracks.erase(track) == 0) {
+        ALOGW("ActiveTracks::remove nonexistent track %p", track.get());
+        return false;
     }
     logTrack("remove", track);
     mActiveTracksGeneration++;
@@ -1994,12 +1991,11 @@ ssize_t ThreadBase::ActiveTracks<T>::remove(const sp<T>& track) {
     track->dumpTee(-1 /* fd */, "_REMOVE");
 #endif
     track->logEndInterval(); // log to MediaMetrics
-    return index;
+    return true;
 }
 
-template <typename T>
-void ThreadBase::ActiveTracks<T>::clear() {
-    for (const sp<T> &track : mActiveTracks) {
+void ThreadBase::ActiveTracks::clear() {
+    for (const sp<IAfTrackBase> &track : mActiveTracks) {
         track->endBatteryAttribution();
         logTrack("clear", track);
     }
@@ -2009,8 +2005,7 @@ void ThreadBase::ActiveTracks<T>::clear() {
     mLatestActiveTrack.clear();
 }
 
-template <typename T>
-void ThreadBase::ActiveTracks<T>::updatePowerState_l(
+void ThreadBase::ActiveTracks::updatePowerState_l(
         const sp<ThreadBase>& thread, bool force) {
     // Updates ActiveTracks client uids to the thread wakelock.
     if (mActiveTracksGeneration != mLastActiveTracksGeneration || force) {
@@ -2019,12 +2014,11 @@ void ThreadBase::ActiveTracks<T>::updatePowerState_l(
     }
 }
 
-template <typename T>
-bool ThreadBase::ActiveTracks<T>::readAndClearHasChanged() {
+bool ThreadBase::ActiveTracks::readAndClearHasChanged() {
     bool hasChanged = mHasChanged;
     mHasChanged = false;
 
-    for (const sp<T> &track : mActiveTracks) {
+    for (const auto& track : mActiveTracks) {
         // Do not short-circuit as all hasChanged states must be reset
         // as all the metadata are going to be sent
         hasChanged |= track->readAndClearHasChanged();
@@ -2032,14 +2026,44 @@ bool ThreadBase::ActiveTracks<T>::readAndClearHasChanged() {
     return hasChanged;
 }
 
-template <typename T>
-void ThreadBase::ActiveTracks<T>::logTrack(
-        const char *funcName, const sp<T> &track) const {
+void ThreadBase::ActiveTracks::logTrack(
+        const char *funcName, const sp<IAfTrackBase>& track) const {
     if (mLocalLog != nullptr) {
         String8 result;
         track->appendDump(result, false /* active */);
         mLocalLog->log("AT::%-10s(%p) %s", funcName, track.get(), result.c_str());
     }
+}
+
+bool ThreadBase::Tracks::remove(const sp<IAfTrackBase>& track)
+{
+    const int trackId = track->id();
+    const bool removed = mTracks.erase(track) > 0;
+    if (removed) {
+        if (mSaveDeletedTrackIds) {
+            // We can't directly access mAudioMixer since the caller may be outside of threadLoop.
+            // Instead, we add to mDeletedTrackIds which is solely used for mAudioMixer update,
+            // to be handled when MixerThread::prepareTracks_l() next changes mAudioMixer.
+            mDeletedTrackIds.emplace(trackId);
+        }
+    }
+    return removed;
+}
+
+// getTrackById_l must be called with holding thread lock
+sp<IAfTrackBase> ThreadBase::getTrackById_l(
+        audio_port_handle_t trackPortId) {
+    for (const auto& track : mTracks) {
+        if (track->portId() == trackPortId) {
+            return track;
+        }
+    }
+    return {};
+}
+
+// getTracks_l must be called with holding thread lock
+std::vector<sp<IAfTrackBase>> ThreadBase::getTracks_l() {
+    return std::vector(mTracks.begin(), mTracks.end());
 }
 
 void ThreadBase::broadcast_l()
@@ -2166,9 +2190,7 @@ PlaybackThread::PlaybackThread(const sp<IAfThreadCallback>& afThreadCallback,
         mSuspended(0), mBytesWritten(0),
         mFramesWritten(0),
         mSuspendedFrames(0),
-        mActiveTracks(&this->mLocalLog),
         // mStreamTypes[] initialized in constructor body
-        mTracks(type == MIXER),
         mOutput(output),
         mNumWrites(0), mNumDelayedWrites(0), mInWrite(false),
         mMixerStatus(MIXER_IDLE),
@@ -2323,11 +2345,10 @@ void PlaybackThread::dumpTracks_l(int fd, const Vector<String16>& /* args */)
     if (numtracks) {
         dprintf(fd, " of which %zu are active\n", numactive);
         result.append(prefix);
-        mTracks[0]->appendDumpHeader(result);
-        for (size_t i = 0; i < numtracks; ++i) {
-            sp<IAfTrack> track = mTracks[i];
+        (*mTracks.begin())->appendDumpHeader(result);
+        for (const auto& track : mTracks) {
             if (track != 0) {
-                bool active = mActiveTracks.indexOf(track) >= 0;
+                bool active = mActiveTracks.count(track) > 0;
                 if (active) {
                     numactiveseen++;
                 }
@@ -2343,10 +2364,9 @@ void PlaybackThread::dumpTracks_l(int fd, const Vector<String16>& /* args */)
         result.append("  The following tracks are in the active list but"
                 " not in the track list\n");
         result.append(prefix);
-        mActiveTracks[0]->appendDumpHeader(result);
-        for (size_t i = 0; i < numactive; ++i) {
-            sp<IAfTrack> track = mActiveTracks[i];
-            if (mTracks.indexOf(track) < 0) {
+        (*mActiveTracks.begin())->appendDumpHeader(result);
+        for (const auto& track : mActiveTracks) {
+            if (mTracks.count(track) == 0) {
                 result.append(prefix);
                 track->appendDump(result, true /* active */);
             }
@@ -2710,8 +2730,7 @@ sp<IAfTrack> PlaybackThread::createTrack_l(
         // conflicts will happen when tracks are moved from one output to another by audio policy
         // manager
         product_strategy_t strategy = getStrategyForStream(streamType);
-        for (size_t i = 0; i < mTracks.size(); ++i) {
-            sp<IAfTrack> t = mTracks[i];
+        for (const auto& t : mPlaybackTracksView) {
             if (t != 0 && t->isExternalTrack()) {
                 product_strategy_t actual = getStrategyForStream(t->streamType());
                 if (sessionId == t->sessionId() && strategy != actual) {
@@ -2779,22 +2798,6 @@ sp<IAfTrack> PlaybackThread::createTrack_l(
 Exit:
     *status = lStatus;
     return track;
-}
-
-template<typename T>
-ssize_t PlaybackThread::Tracks<T>::remove(const sp<T>& track)
-{
-    const int trackId = track->id();
-    const ssize_t index = mTracks.remove(track);
-    if (index >= 0) {
-        if (mSaveDeletedTrackIds) {
-            // We can't directly access mAudioMixer since the caller may be outside of threadLoop.
-            // Instead, we add to mDeletedTrackIds which is solely used for mAudioMixer update,
-            // to be handled when MixerThread::prepareTracks_l() next changes mAudioMixer.
-            mDeletedTrackIds.emplace(trackId);
-        }
-    }
-    return index;
 }
 
 uint32_t PlaybackThread::correctLatency_l(uint32_t latency) const
@@ -2878,8 +2881,7 @@ status_t PlaybackThread::setPortsVolume(
         const std::vector<audio_port_handle_t>& portIds, float volume, bool muted) {
     audio_utils::lock_guard _l(mutex());
     for (const auto& portId : portIds) {
-        for (size_t i = 0; i < mTracks.size(); i++) {
-            sp<IAfTrack> track = mTracks[i].get();
+        for (const auto& track : mPlaybackTracksView) {
             if (portId == track->portId()) {
                 track->setPortVolume(volume);
                 track->setPortMute(muted);
@@ -2898,7 +2900,7 @@ void PlaybackThread::setVolumeForOutput_l(float left, float right) const
 
 void PlaybackThread::checkUpdateTrackMetadataForUid(uid_t uid) {
     audio_utils::lock_guard _l(mutex());
-    for (const sp<IAfTrack>& track : mActiveTracks) {
+    for (const auto& track : mActiveTracks) {
         if (track->uid() == uid) {
             track->setMetadataHasChanged();
         }
@@ -2910,7 +2912,7 @@ status_t PlaybackThread::addTrack_l(const sp<IAfTrack>& track)
 {
     status_t status = ALREADY_EXISTS;
 
-    if (mActiveTracks.indexOf(track) < 0) {
+    if (mActiveTracks.count(track) == 0) {
         // the track is newly added, make sure it fills up all its
         // buffers before playing. This is to ensure the client will
         // effectively get the latency it requested.
@@ -2985,7 +2987,7 @@ status_t PlaybackThread::addTrack_l(const sp<IAfTrack>& track)
             if (track->getHapticPlaybackEnabled()) {
                 // Disable haptic playback of all active track to ensure only
                 // one track playing haptic if current track should play haptic.
-                for (const auto &t : mActiveTracks) {
+                for (const auto& t : mActivePlaybackTracksView) {
                     t->setHapticPlaybackEnabled(false);
                 }
             }
@@ -3022,7 +3024,7 @@ bool PlaybackThread::destroyTrack_l(const sp<IAfTrack>& track)
 {
     track->terminate();
     // active tracks are removed by threadLoop()
-    bool trackActive = (mActiveTracks.indexOf(track) >= 0);
+    bool trackActive = (mActiveTracks.count(track) > 0);
     track->setState(IAfTrackBase::STOPPED);
     if (!trackActive) {
         removeTrack_l(track);
@@ -3403,7 +3405,7 @@ ThreadBase::MetadataUpdate PlaybackThread::updateMetadata_l()
     }
     StreamOutHalInterface::SourceMetadata metadata;
     std::map<audio_session_t, std::vector<playback_track_metadata_v7_t> >allSessionsMetadata;
-    for (const sp<IAfTrack>& track : mActiveTracks) {
+    for (const auto& track : mActivePlaybackTracksView) {
         std::vector<playback_track_metadata_v7_t>& sessionMetadata =
                 allSessionsMetadata[track->sessionId()];
         auto backInserter = std::back_inserter(sessionMetadata);
@@ -3480,8 +3482,7 @@ product_strategy_t PlaybackThread::getStrategyForSession_l(audio_session_t sessi
     if (sessionId == AUDIO_SESSION_OUTPUT_MIX) {
         return getStrategyForStream(AUDIO_STREAM_MUSIC);
     }
-    for (size_t i = 0; i < mTracks.size(); i++) {
-        sp<IAfTrack> track = mTracks[i];
+    for (const auto& track : mPlaybackTracksView) {
         if (sessionId == track->sessionId() && !track->isInvalid()) {
             return getStrategyForStream(track->streamType());
         }
@@ -3531,8 +3532,7 @@ status_t PlaybackThread::setSyncEvent(const sp<SyncEvent>& event)
 
     audio_utils::lock_guard _l(mutex());
 
-    for (size_t i = 0; i < mTracks.size(); ++i) {
-        sp<IAfTrack> track = mTracks[i];
+    for (const auto& track: mPlaybackTracksView) {
         if (event->triggerSession() == track->sessionId()) {
             (void) track->setSyncEvent(event);
             return NO_ERROR;
@@ -3548,7 +3548,7 @@ bool PlaybackThread::isValidSyncEvent(const sp<SyncEvent>& event) const
 }
 
 void PlaybackThread::threadLoop_removeTracks(
-        [[maybe_unused]] const Vector<sp<IAfTrack>>& tracksToRemove)
+        [[maybe_unused]] const std::vector<sp<IAfTrackBase>>& tracksToRemove)
 {
     // Miscellaneous track cleanup when removed from the active list,
     // called without Thread lock but synchronized with threadLoop processing.
@@ -3680,8 +3680,7 @@ void PlaybackThread::threadLoop_exit()
 {
     {
         audio_utils::lock_guard _l(mutex());
-        for (size_t i = 0; i < mTracks.size(); i++) {
-            sp<IAfTrack> track = mTracks[i];
+        for (const auto& track : mTracks) {
             track->invalidate();
         }
         // Clear ActiveTracks to update BatteryNotifier in case active tracks remain.
@@ -3734,9 +3733,7 @@ bool PlaybackThread::invalidateTracks_l(audio_stream_type_t streamType)
     ALOGV("MixerThread::invalidateTracks() mixer %p, streamType %d, mTracks.size %zu",
             this,  streamType, mTracks.size());
     bool trackMatch = false;
-    size_t size = mTracks.size();
-    for (size_t i = 0; i < size; i++) {
-        sp<IAfTrack> t = mTracks[i];
+    for (const auto& t : mPlaybackTracksView) {
         if (t->streamType() == streamType && t->isExternalTrack()) {
             t->invalidate();
             trackMatch = true;
@@ -3758,9 +3755,7 @@ void PlaybackThread::invalidateTracks(std::set<audio_port_handle_t>& portIds) {
 
 bool PlaybackThread::invalidateTracks_l(std::set<audio_port_handle_t>& portIds) {
     bool trackMatch = false;
-    const size_t size = mTracks.size();
-    for (size_t i = 0; i < size; i++) {
-        sp<IAfTrack> t = mTracks[i];
+    for (const auto& t : mTracks) {
         if (t->isExternalTrack() && portIds.find(t->portId()) != portIds.end()) {
             t->invalidate();
             portIds.erase(t->portId());
@@ -3771,22 +3766,6 @@ bool PlaybackThread::invalidateTracks_l(std::set<audio_port_handle_t>& portIds) 
         }
     }
     return trackMatch;
-}
-
-// getTrackById_l must be called with holding thread lock
-IAfTrack* PlaybackThread::getTrackById_l(
-        audio_port_handle_t trackPortId) {
-    for (size_t i = 0; i < mTracks.size(); i++) {
-        if (mTracks[i]->portId() == trackPortId) {
-            return mTracks[i].get();
-        }
-    }
-    return nullptr;
-}
-
-// getTracks_l must be called with holding thread lock
-std::vector<sp<IAfTrack>> PlaybackThread::getTracks_l() {
-    return std::vector(mTracks.begin(), mTracks.end());
 }
 
 status_t PlaybackThread::addEffectChain_l(const sp<IAfEffectChain>& chain)
@@ -3885,8 +3864,7 @@ status_t PlaybackThread::addEffectChain_l(const sp<IAfEffectChain>& chain)
 
     if (!audio_is_global_session(session)) {
         // Attach all tracks with same session ID to this chain.
-        for (size_t i = 0; i < mTracks.size(); ++i) {
-            sp<IAfTrack> track = mTracks[i];
+        for (const auto& track : mPlaybackTracksView) {
             if (session == track->sessionId()) {
                 ALOGV("addEffectChain_l() track->setMainBuffer track %p buffer %p",
                         track.get(), buffer);
@@ -3896,7 +3874,7 @@ status_t PlaybackThread::addEffectChain_l(const sp<IAfEffectChain>& chain)
         }
 
         // indicate all active tracks in the chain
-        for (const sp<IAfTrack>& track : mActiveTracks) {
+        for (const auto& track : mActiveTracks) {
             if (session == track->sessionId()) {
                 ALOGV("addEffectChain_l() activating track %p on session %d",
                         track.get(), session);
@@ -3948,7 +3926,7 @@ size_t PlaybackThread::removeEffectChain_l(const sp<IAfEffectChain>& chain)
         if (chain == mEffectChains[i]) {
             mEffectChains.removeAt(i);
             // detach all active tracks from the chain
-            for (const sp<IAfTrack>& track : mActiveTracks) {
+            for (const auto& track : mActiveTracks) {
                 if (session == track->sessionId()) {
                     ALOGV("removeEffectChain_l(): stopping track on chain %p for session Id: %d",
                             chain.get(), session);
@@ -3957,8 +3935,7 @@ size_t PlaybackThread::removeEffectChain_l(const sp<IAfEffectChain>& chain)
             }
 
             // detach all tracks with same session ID from this chain
-            for (size_t j = 0; j < mTracks.size(); ++j) {
-                sp<IAfTrack> track = mTracks[j];
+            for (const auto& track : mPlaybackTracksView) {
                 if (session == track->sessionId()) {
                     track->setMainBuffer(reinterpret_cast<float*>(mSinkBuffer));
                     chain->decTrackCnt();
@@ -4002,8 +3979,7 @@ status_t PlaybackThread::attachAuxEffect_l(
 
 void PlaybackThread::detachAuxEffect_l(int effectId)
 {
-    for (size_t i = 0; i < mTracks.size(); ++i) {
-        sp<IAfTrack> track = mTracks[i];
+    for (const auto& track : mPlaybackTracksView) {
         if (track->auxEffectId() == effectId) {
             attachAuxEffect_l(track, 0);
         }
@@ -4046,7 +4022,7 @@ NO_THREAD_SAFETY_ANALYSIS  // manual locking of AudioFlinger
         }
     }
 
-    Vector<sp<IAfTrack>> tracksToRemove;
+    std::vector<sp<IAfTrackBase>> tracksToRemove;
 
     mStandbyTimeNs = systemTime();
     int64_t lastLoopCountWritten = -2; // never matches "previous" loop, when loopCount = 0.
@@ -4092,7 +4068,7 @@ NO_THREAD_SAFETY_ANALYSIS  // manual locking of AudioFlinger
         Vector<sp<IAfEffectChain>> effectChains;
         audio_session_t activeHapticSessionId = AUDIO_SESSION_NONE;
         bool isHapticSessionSpatialized = false;
-        std::vector<sp<IAfTrack>> activeTracks;
+        std::vector<sp<IAfTrackBase>> activeTracks;
 
         // If the device is AUDIO_DEVICE_OUT_BUS, check for downstream latency.
         //
@@ -4183,7 +4159,7 @@ NO_THREAD_SAFETY_ANALYSIS  // manual locking of AudioFlinger
 
                 continue;
             }
-            if ((mActiveTracks.isEmpty() && systemTime() > mStandbyTimeNs) ||
+            if ((mActiveTracks.empty() && systemTime() > mStandbyTimeNs) ||
                                    isSuspended()) {
                 // put audio hardware into standby after short delay
                 if (shouldStandby_l()) {
@@ -4200,7 +4176,7 @@ NO_THREAD_SAFETY_ANALYSIS  // manual locking of AudioFlinger
                     sendStatistics(false /* force */);
                 }
 
-                if (mActiveTracks.isEmpty() && mConfigEvents.isEmpty()) {
+                if (mActiveTracks.empty() && mConfigEvents.isEmpty()) {
                     // we're about to wait, flush the binder command buffer
                     IPCThreadState::self()->flushCommands();
 
@@ -4250,7 +4226,7 @@ NO_THREAD_SAFETY_ANALYSIS  // manual locking of AudioFlinger
 
             // updateTeePatches_l will acquire the ThreadBase_Mutex of other threads,
             // so this is done before we lock our effect chains.
-            for (const auto& track : mActiveTracks) {
+            for (const auto& track : mActivePlaybackTracksView) {
                 track->updateTeePatches_l();
             }
 
@@ -4284,7 +4260,7 @@ NO_THREAD_SAFETY_ANALYSIS  // manual locking of AudioFlinger
             // The haptic data from the effect is at a higher priority than the one from track.
             // TODO: Write haptic data directly to sink buffer when mixing.
             if (mHapticChannelCount > 0) {
-                for (const auto& track : mActiveTracks) {
+                for (const auto& track : mActivePlaybackTracksView) {
                     sp<IAfEffectChain> effectChain = getEffectChain_l(track->sessionId());
                     if (effectChain != nullptr
                             && effectChain->containsHapticGeneratingEffect_l()) {
@@ -4317,7 +4293,8 @@ NO_THREAD_SAFETY_ANALYSIS  // manual locking of AudioFlinger
                     mCurrentWriteLength = mSinkBufferSize;
 
                     // Tally underrun frames as we are inserting 0s here.
-                    for (const auto& track : activeTracks) {
+                    for (const auto& tb : activeTracks) {
+                        const auto track = tb->asIAfTrack();
                         if (track->fillingStatus() == IAfTrack::FS_ACTIVE
                                 && !track->isStopped()
                                 && !track->isPaused()
@@ -4806,7 +4783,7 @@ void PlaybackThread::collectTimestamps_l()
                     ? systemTime() : (int64_t)mLastIoBeginNs;
         }
 
-        for (const sp<IAfTrack>& t : mActiveTracks) {
+        for (const auto& t : mActivePlaybackTracksView) {
             if (!t->isFastTrack()) {
                 t->updateTrackFrameInfo(
                         t->audioTrackServerProxy()->framesReleased(),
@@ -4837,7 +4814,7 @@ void PlaybackThread::collectTimestamps_l()
 }
 
 // removeTracks_l() must be called with ThreadBase::mutex() held
-void PlaybackThread::removeTracks_l(const Vector<sp<IAfTrack>>& tracksToRemove)
+void PlaybackThread::removeTracks_l(const std::vector<sp<IAfTrackBase>>& tracksToRemove)
 NO_THREAD_SAFETY_ANALYSIS  // release and re-acquire mutex()
 {
     if (tracksToRemove.empty()) return;
@@ -4870,7 +4847,7 @@ NO_THREAD_SAFETY_ANALYSIS  // release and re-acquire mutex()
             mutex().unlock();
             // Unlock due to VibratorService will lock for this call and will
             // call Tracks.mute/unmute which also require thread's lock.
-            afutils::onExternalVibrationStop(track->getExternalVibration());
+            afutils::onExternalVibrationStop(track->asIAfTrack()->getExternalVibration());
             mutex().lock();
 
             // When the track is stop, set the haptic intensity as MUTE
@@ -4890,7 +4867,7 @@ NO_THREAD_SAFETY_ANALYSIS  // release and re-acquire mutex()
 
         if (track->isTerminated()) {
             // remove from our tracks vector
-            removeTrack_l(track);
+            removeTrack_l(track->asIAfTrack());
         }
     }
 
@@ -5594,7 +5571,7 @@ void MixerThread::threadLoop_sleepTime()
 
 // prepareTracks_l() must be called with ThreadBase::mutex() held
 PlaybackThread::mixer_state MixerThread::prepareTracks_l(
-        Vector<sp<IAfTrack>>* tracksToRemove)
+        std::vector<sp<IAfTrackBase>>* tracksToRemove)
 {
     // clean up deleted track ids in AudioMixer before allocating new tracks
     (void)mTracks.processDeletedTrackIds([this](int trackId) {
@@ -5612,7 +5589,7 @@ PlaybackThread::mixer_state MixerThread::prepareTracks_l(
     size_t tracksWithEffect = 0;
     // counts only _active_ fast tracks
     size_t fastTracks = 0;
-    uint32_t resetMask = 0; // bit mask of fast tracks that need to be reset
+    std::vector<sp<IAfTrack>> resetTracks;
 
     float masterVolume = mMasterVolume;
     bool masterMute = mMasterMute;
@@ -5682,9 +5659,7 @@ PlaybackThread::mixer_state MixerThread::prepareTracks_l(
     // implicit nested scope for variable capture
 
     bool noFastHapticTrack = true;
-    for (size_t i=0 ; i<count ; i++) {
-        const sp<IAfTrack> t = mActiveTracks[i];
-
+    for (const auto& t : mActivePlaybackTracksView) {
         // this const just means the local variable doesn't change
         IAfTrack* const track = t.get();
 
@@ -5805,7 +5780,7 @@ PlaybackThread::mixer_state MixerThread::prepareTracks_l(
                     // Can't reset directly, as fast mixer is still polling this track
                     //   track->reset();
                     // So instead mark this track as needing to be reset after push with ack
-                    resetMask |= 1 << i;
+                    resetTracks.push_back(track);
                 }
                 isActive = false;
                 break;
@@ -5919,7 +5894,7 @@ PlaybackThread::mixer_state MixerThread::prepareTracks_l(
                             track->sharedBuffer() != 0);
                     // Since the FastMixer state already has the track inactive, do nothing here.
                 }
-                tracksToRemove->add(track);
+                tracksToRemove->push_back(track);
                 // Avoids a misleading display in dumpsys
                 track->fastTrackUnderruns().mBitFields.mMostRecent = UNDERRUN_FULL;
             }
@@ -5951,7 +5926,7 @@ PlaybackThread::mixer_state MixerThread::prepareTracks_l(
                         " mask %#x, format %#x, sessionId %d",
                         __func__, trackId,
                         track->channelMask(), track->format(), track->sessionId());
-                tracksToRemove->add(track);
+                tracksToRemove->push_back(track);
                 track->invalidate(); // consider it dead.
                 continue;
             }
@@ -6305,7 +6280,7 @@ PlaybackThread::mixer_state MixerThread::prepareTracks_l(
                     if (track->isStopped()) {
                         track->reset();
                     }
-                    tracksToRemove->add(track);
+                    tracksToRemove->push_back(track);
                 }
             } else {
                 // No buffers for this track. Give it a few chances to
@@ -6313,7 +6288,7 @@ PlaybackThread::mixer_state MixerThread::prepareTracks_l(
                 if (--(track->retryCount()) <= 0) {
                     ALOGI("%s BUFFER TIMEOUT: remove track(%d) from active list due to underrun"
                           " on thread %d", __func__, trackId, mId);
-                    tracksToRemove->add(track);
+                    tracksToRemove->push_back(track);
                     // indicate to client process that the track was disabled because of underrun;
                     // it will then automatically call start() when data is available
                     track->disable();
@@ -6385,12 +6360,8 @@ PlaybackThread::mixer_state MixerThread::prepareTracks_l(
 #endif
 
     // Now perform the deferred reset on fast tracks that have stopped
-    while (resetMask != 0) {
-        size_t i = __builtin_ctz(resetMask);
-        ALOG_ASSERT(i < count);
-        resetMask &= ~(1 << i);
-        sp<IAfTrack> track = mActiveTracks[i];
-        ALOG_ASSERT(track->isFastTrack() && track->isStopped());
+    for (const auto& track : resetTracks) {
+        // ALOG_ASSERT(track->isFastTrack() && track->isStopped());
         track->reset();
     }
 
@@ -6457,13 +6428,8 @@ PlaybackThread::mixer_state MixerThread::prepareTracks_l(
 // trackCountForUid_l() must be called with ThreadBase::mutex() held
 uint32_t PlaybackThread::trackCountForUid_l(uid_t uid) const
 {
-    uint32_t trackCount = 0;
-    for (size_t i = 0; i < mTracks.size() ; i++) {
-        if (mTracks[i]->uid() == uid) {
-            trackCount++;
-        }
-    }
-    return trackCount;
+    return std::count_if(mTracks.begin(), mTracks.end(),
+            [uid](const auto& track) { return track->uid() == uid; });
 }
 
 bool PlaybackThread::IsTimestampAdvancing::check(AudioStreamOut* output)
@@ -6551,7 +6517,7 @@ bool MixerThread::checkForNewParameter_l(const String8& keyValuePair,
         // do not accept frame count changes if tracks are open as the track buffer
         // size depends on frame count and correct behavior would not be guaranteed
         // if frame count is changed after track creation
-        if (!mTracks.isEmpty()) {
+        if (!mTracks.empty()) {
             status = INVALID_OPERATION;
         } else {
             reconfig = true;
@@ -6801,7 +6767,7 @@ void DirectOutputThread::setMasterBalance(float balance)
     }
 }
 
-void DirectOutputThread::processVolume_l(IAfTrack* track, bool lastTrack)
+void DirectOutputThread::processVolume_l(const sp<IAfTrack>& track, bool lastTrack)
 {
     float left, right;
 
@@ -6923,7 +6889,7 @@ void DirectOutputThread::processVolume_l(IAfTrack* track, bool lastTrack)
 void DirectOutputThread::onAddNewTrack_l()
 {
     sp<IAfTrack> previousTrack = mPreviousTrack.promote();
-    sp<IAfTrack> latestTrack = mActiveTracks.getLatest();
+    const sp<IAfTrack> latestTrack = mActiveTracks.getLatest()->asIAfTrack();
 
     if (previousTrack != 0 && latestTrack != 0) {
         if (mType == DIRECT) {
@@ -6946,7 +6912,7 @@ void DirectOutputThread::onAddNewTrack_l()
 }
 
 PlaybackThread::mixer_state DirectOutputThread::prepareTracks_l(
-    Vector<sp<IAfTrack>>* tracksToRemove
+    std::vector<sp<IAfTrackBase>>* tracksToRemove
 )
 {
     size_t count = mActiveTracks.size();
@@ -6955,14 +6921,14 @@ PlaybackThread::mixer_state DirectOutputThread::prepareTracks_l(
     bool doHwResume = false;
 
     // find out which tracks need to be processed
-    for (const sp<IAfTrack>& t : mActiveTracks) {
+    for (const auto& t : mActiveTracks) {
         if (t->isInvalid()) {
             ALOGW("An invalidated track shouldn't be in active list");
-            tracksToRemove->add(t);
+            tracksToRemove->push_back(t);
             continue;
         }
 
-        IAfTrack* const track = t.get();
+        const auto track = t->asIAfTrack();
 #ifdef VERY_VERY_VERBOSE_LOGGING
         audio_track_cblk_t* cblk = track->cblk();
 #endif
@@ -6970,7 +6936,7 @@ PlaybackThread::mixer_state DirectOutputThread::prepareTracks_l(
         // In theory an older track could underrun and restart after the new one starts
         // but as we only care about the transition phase between two tracks on a
         // direct output, it is not a problem to ignore the underrun case.
-        sp<IAfTrack> l = mActiveTracks.getLatest();
+        const sp<IAfTrack> l = mActiveTracks.getLatest()->asIAfTrack();
         bool last = l.get() == track;
 
         if (track->isPausePending()) {
@@ -7063,7 +7029,7 @@ PlaybackThread::mixer_state DirectOutputThread::prepareTracks_l(
 
                 // reset retry count
                 track->retryCount() = targetRetryCount;
-                mActiveTrack = t;
+                mActiveTrack = t->asIAfTrack();
                 mixerStatus = MIXER_TRACKS_READY;
                 if (mHwPaused) {
                     doHwResume = true;
@@ -7100,7 +7066,7 @@ PlaybackThread::mixer_state DirectOutputThread::prepareTracks_l(
                     if (track->isStopped()) {
                         track->reset();
                     }
-                    tracksToRemove->add(track);
+                    tracksToRemove->push_back(track);
                 }
             } else {
                 // No buffers for this track. Give it a few chances to
@@ -7114,7 +7080,7 @@ PlaybackThread::mixer_state DirectOutputThread::prepareTracks_l(
                     } else {
                         ALOGI("%s BUFFER TIMEOUT: remove track(%d) from active list due to"
                               " underrun on thread %d", __func__, trackId, mId);
-                        tracksToRemove->add(track);
+                        tracksToRemove->push_back(track);
                         // indicate to client process that the track was disabled because of
                         // underrun; it will then automatically call start() when data is available
                         track->disable();
@@ -7137,9 +7103,9 @@ PlaybackThread::mixer_state DirectOutputThread::prepareTracks_l(
 
     // if an active track did not command a flush, check for pending flush on stopped tracks
     if (!mFlushPending) {
-        for (size_t i = 0; i < mTracks.size(); i++) {
-            if (mTracks[i]->isFlushPending()) {
-                mTracks[i]->flushAck();
+        for (const auto& track: mPlaybackTracksView) {
+            if (track->isFlushPending()) {
+                track->flushAck();
                 mFlushPending = true;
             }
         }
@@ -7215,9 +7181,9 @@ void DirectOutputThread::threadLoop_exit()
 {
     {
         audio_utils::lock_guard _l(mutex());
-        for (size_t i = 0; i < mTracks.size(); i++) {
-            if (mTracks[i]->isFlushPending()) {
-                mTracks[i]->flushAck();
+        for (const auto& track : mPlaybackTracksView) {
+            if (track->isFlushPending()) {
+                track->flushAck();
                 mFlushPending = true;
             }
         }
@@ -7239,7 +7205,8 @@ bool DirectOutputThread::shouldStandby_l()
     // after a timeout and we will enter standby then.
     // On offload threads, do not enter standby if the main track is still underrunning.
     if (mTracks.size() > 0) {
-        const auto& mainTrack = mTracks[mTracks.size() - 1];
+        // TODO(b/410038399) last track is main track?
+        const auto& mainTrack = (*mTracks.begin())->asIAfTrack();
 
         trackPaused = mainTrack->isPaused();
         trackStopped = mainTrack->isStopped() || mainTrack->state() == IAfTrackBase::IDLE;
@@ -7265,7 +7232,7 @@ bool DirectOutputThread::checkForNewParameter_l(const String8& keyValuePair,
         // do not accept frame count changes if tracks are open as the track buffer
         // size depends on frame count and correct behavior would not be garantied
         // if frame count is changed after track creation
-        if (!mTracks.isEmpty()) {
+        if (!mTracks.empty()) {
             status = INVALID_OPERATION;
         } else {
             reconfig = true;
@@ -7514,7 +7481,7 @@ void OffloadThread::threadLoop_exit()
 }
 
 PlaybackThread::mixer_state OffloadThread::prepareTracks_l(
-    Vector<sp<IAfTrack>>* tracksToRemove
+        std::vector<sp<IAfTrackBase>>* tracksToRemove
 )
 {
     size_t count = mActiveTracks.size();
@@ -7526,7 +7493,7 @@ PlaybackThread::mixer_state OffloadThread::prepareTracks_l(
     ALOGV("OffloadThread::prepareTracks_l active tracks %zu", count);
 
     // find out which tracks need to be processed
-    for (const sp<IAfTrack>& t : mActiveTracks) {
+    for (const auto& t : mActivePlaybackTracksView) {
         IAfTrack* const track = t.get();
 #ifdef VERY_VERY_VERBOSE_LOGGING
         audio_track_cblk_t* cblk = track->cblk();
@@ -7535,12 +7502,12 @@ PlaybackThread::mixer_state OffloadThread::prepareTracks_l(
         // In theory an older track could underrun and restart after the new one starts
         // but as we only care about the transition phase between two tracks on a
         // direct output, it is not a problem to ignore the underrun case.
-        sp<IAfTrack> l = mActiveTracks.getLatest();
+        const sp<IAfTrack> l = mActiveTracks.getLatest()->asIAfTrack();
         bool last = l.get() == track;
 
         if (track->isInvalid()) {
             ALOGW("An invalidated track shouldn't be in active list");
-            tracksToRemove->add(track);
+            tracksToRemove->push_back(track);
             continue;
         }
 
@@ -7578,7 +7545,7 @@ PlaybackThread::mixer_state OffloadThread::prepareTracks_l(
                 mPausedBytesRemaining = mBytesRemaining;
                 mBytesRemaining = 0;    // stop writing
             }
-            tracksToRemove->add(track);
+            tracksToRemove->push_back(track);
         } else if (track->isFlushPending()) {
             if (track->isStopping_1()) {
                 track->retryCount() = kMaxTrackStopRetriesOffload;
@@ -7654,7 +7621,7 @@ PlaybackThread::mixer_state OffloadThread::prepareTracks_l(
                 } else {
                     track->retryCount() = kMaxTrackRetriesOffload;
                 }
-                mActiveTrack = t;
+                mActiveTrack = t->asIAfTrack();
                 mixerStatus = MIXER_TRACKS_READY;
             }
         } else {
@@ -7699,7 +7666,7 @@ PlaybackThread::mixer_state OffloadThread::prepareTracks_l(
                     mOutput->presentationComplete();
                     track->presentationComplete(latency_l()); // always returns true
                     track->reset();
-                    tracksToRemove->add(track);
+                    tracksToRemove->push_back(track);
                     // OFFLOADED stop resets frame counts.
                     if (!mUseAsyncWrite) {
                         // If we don't get explicit drain notification we must
@@ -7721,7 +7688,7 @@ PlaybackThread::mixer_state OffloadThread::prepareTracks_l(
                     } else {
                         ALOGI("%s BUFFER TIMEOUT: remove track(%d) from active list due to"
                               " underrun on thread %d", __func__, track->id(), mId);
-                        tracksToRemove->add(track);
+                        tracksToRemove->push_back(track);
                         // tell client process that the track was disabled because of underrun;
                         // it will then automatically call start() when data is available
                         track->disable();
@@ -8117,7 +8084,7 @@ void SpatializerThread::setHalLatencyMode_l() {
         return;
     }
     // Do not update the HAL latency mode if no track is active
-    if (mActiveTracks.isEmpty()) {
+    if (mActiveTracks.empty()) {
         return;
     }
 
@@ -8244,7 +8211,6 @@ RecordThread::RecordThread(const sp<IAfThreadCallback>& afThreadCallback,
     ThreadBase(afThreadCallback, id, type, systemReady, false /* isOut */),
     mInput(input),
     mSource(mInput),
-    mActiveTracks(&this->mLocalLog),
     mRsmpInBuffer(NULL),
     // mRsmpInFrames, mRsmpInFramesP2, and mRsmpInFramesOA are set by readInputParameters_l()
     mRsmpInRear(0)
@@ -8428,8 +8394,7 @@ void RecordThread::preExit()
 {
     ALOGV("  preExit()");
     audio_utils::lock_guard _l(mutex());
-    for (size_t i = 0; i < mTracks.size(); i++) {
-        sp<IAfRecordTrack> track = mTracks[i];
+    for (const auto& track : mTracks) {
         track->invalidate();
     }
     mActiveTracks.clear();
@@ -8495,8 +8460,7 @@ reacquire_wakelock:
             }
 
             // if no active track(s), then standby and release wakelock
-            size_t size = mActiveTracks.size();
-            if (size == 0) {
+            if (mActiveTracks.empty()) {
                 standbyIfNotAlreadyInStandby();
                 // exitPending() can't become true here
                 releaseWakeLock_l();
@@ -8509,19 +8473,18 @@ reacquire_wakelock:
 
             bool doBroadcast = false;
             bool allStopped = true;
-            for (size_t i = 0; i < size; ) {
+            for (auto it = mActiveTracks.begin() ; it != mActiveTracks.end(); ) {
                 if (activeTrack) {  // ensure track release is outside lock.
                     oldActiveTracks.emplace_back(std::move(activeTrack));
                 }
-                activeTrack = mActiveTracks[i];
+                activeTrack = (*it)->asIAfRecordTrack();
                 if (activeTrack->isTerminated()) {
                     if (activeTrack->isFastTrack()) {
                         ALOG_ASSERT(fastTrackToRemove == 0);
                         fastTrackToRemove = activeTrack;
                     }
                     removeTrack_l(activeTrack);
-                    mActiveTracks.remove(activeTrack);
-                    size--;
+                    it = mActiveTracks.erase(it);
                     continue;
                 }
 
@@ -8529,7 +8492,7 @@ reacquire_wakelock:
                 switch (activeTrackState) {
 
                 case IAfTrackBase::PAUSING:
-                    mActiveTracks.remove(activeTrack);
+                    it = mActiveTracks.erase(it);
                     activeTrack->setState(IAfTrackBase::PAUSED);
                     if (activeTrack->isFastTrack()) {
                         ALOGV("%s fast track is paused, thus removed from active list", __func__);
@@ -8538,12 +8501,11 @@ reacquire_wakelock:
                         fastTrackToRemove = activeTrack;
                     }
                     doBroadcast = true;
-                    size--;
                     continue;
 
                 case IAfTrackBase::STARTING_1:
                     sleepUs = 10000;
-                    i++;
+                    ++it;
                     allStopped = false;
                     continue;
 
@@ -8566,8 +8528,8 @@ reacquire_wakelock:
                 case IAfTrackBase::PAUSED:  // cannot be on ActiveTracks if paused
                 case IAfTrackBase::STOPPED: // cannot be on ActiveTracks if destroyed/terminated
                 default:
-                    LOG_ALWAYS_FATAL("%s: Unexpected active track state:%d, id:%d, tracks:%zu",
-                            __func__, activeTrackState, activeTrack->id(), size);
+                    LOG_ALWAYS_FATAL("%s: Unexpected active track state:%d, id:%d",
+                            __func__, activeTrackState, activeTrack->id());
                 }
 
                 if (activeTrack->isFastTrack()) {
@@ -8580,7 +8542,7 @@ reacquire_wakelock:
                     //    be invalidated again until unsilenced
                     bool invalidate = false;
                     if (activeTrack->isSilenced()) {
-                        if (size > 1) {
+                        if (mActiveTracks.size() > 1) {
                             invalidate = true;
                         } else {
                             silenceFastCapture = true;
@@ -8596,16 +8558,14 @@ reacquire_wakelock:
                         activeTrack->invalidate();
                         fastTrackToRemove = activeTrack;
                         removeTrack_l(activeTrack);
-                        mActiveTracks.remove(activeTrack);
-                        size--;
+                        it = mActiveTracks.erase(it);
                         continue;
                     }
                     fastTrack = activeTrack;
                 }
 
                 activeTracks.add(activeTrack);
-                i++;
-
+                ++it;
             }
 
             mActiveTracks.updatePowerState_l(this);
@@ -9022,8 +8982,7 @@ unlock:
 
     {
         audio_utils::lock_guard _l(mutex());
-        for (size_t i = 0; i < mTracks.size(); i++) {
-            sp<IAfRecordTrack> track = mTracks[i];
+        for (const auto& track : mTracks) {
             track->invalidate();
         }
         mActiveTracks.clear();
@@ -9331,7 +9290,7 @@ status_t RecordThread::start(IAfRecordTrack* recordTrack,
             ALOGW("%s track %d: invalidated before startInput", __func__, recordTrack->portId());
             return DEAD_OBJECT;
         }
-        if (mActiveTracks.indexOf(recordTrack) >= 0) {
+        if (mActiveTracks.count(recordTrack) > 0) {
             if (recordTrack->state() == IAfTrackBase::PAUSING) {
                 // We haven't stopped yet (moved to PAUSED and not in mActiveTracks)
                 // so no need to startInput().
@@ -9420,7 +9379,7 @@ bool RecordThread::stop(IAfRecordTrack* recordTrack) {
     ALOGV("RecordThread::stop");
     audio_utils::unique_lock _l(mutex());
     // if we're invalid, we can't be on the ActiveTracks.
-    if (mActiveTracks.indexOf(recordTrack) < 0 || recordTrack->state() == IAfTrackBase::PAUSING) {
+    if (mActiveTracks.count(recordTrack) == 0 || recordTrack->state() == IAfTrackBase::PAUSING) {
         return false;
     }
     // note that threadLoop may still be processing the track at this point [without lock]
@@ -9567,7 +9526,7 @@ ThreadBase::MetadataUpdate RecordThread::updateMetadata_l()
     }
     StreamInHalInterface::SinkMetadata metadata;
     auto backInserter = std::back_inserter(metadata.tracks);
-    for (const sp<IAfRecordTrack>& track : mActiveTracks) {
+    for (const auto& track : mActiveRecordTracksView) {
         track->copyMetadataTo(backInserter);
     }
     mInput->stream->updateSinkMetadata(metadata);
@@ -9583,7 +9542,7 @@ void RecordThread::destroyTrack_l(const sp<IAfRecordTrack>& track)
     track->setState(IAfTrackBase::STOPPED);
 
     // active tracks are removed by threadLoop()
-    if (mActiveTracks.indexOf(track) < 0) {
+    if (mActiveTracks.count(track) == 0) {
         removeTrack_l(track);
     }
 }
@@ -9609,7 +9568,7 @@ void RecordThread::dumpInternals_l(int fd, const Vector<String16>& /* args */)
     dprintf(fd, "  AudioStreamIn: %p flags %#x (%s)\n",
             input, flags, toString(flags).c_str());
     dprintf(fd, "  Frames read: %lld\n", (long long)mFramesRead);
-    if (mActiveTracks.isEmpty()) {
+    if (mActiveTracks.empty()) {
         dprintf(fd, "  No active record clients\n");
     }
 
@@ -9641,11 +9600,10 @@ void RecordThread::dumpTracks_l(int fd, const Vector<String16>& /* args */)
     if (numtracks) {
         dprintf(fd, " of which %zu are active\n", numactive);
         result.append(prefix);
-        mTracks[0]->appendDumpHeader(result);
-        for (size_t i = 0; i < numtracks ; ++i) {
-            sp<IAfRecordTrack> track = mTracks[i];
+        (*mTracks.begin())->appendDumpHeader(result);
+        for (const auto& track : mTracks) {
             if (track != 0) {
-                bool active = mActiveTracks.indexOf(track) >= 0;
+                bool active = mActiveTracks.count(track) > 0;
                 if (active) {
                     numactiveseen++;
                 }
@@ -9661,10 +9619,9 @@ void RecordThread::dumpTracks_l(int fd, const Vector<String16>& /* args */)
         result.append("  The following tracks are in the active list but"
                 " not in the track list\n");
         result.append(prefix);
-        mActiveTracks[0]->appendDumpHeader(result);
-        for (size_t i = 0; i < numactive; ++i) {
-            sp<IAfRecordTrack> track = mActiveTracks[i];
-            if (mTracks.indexOf(track) < 0) {
+        (*mActiveTracks.begin())->appendDumpHeader(result);
+        for (const auto& track : mActiveRecordTracksView) {
+            if (mTracks.count(track) == 0) {
                 result.append(prefix);
                 track->appendDump(result, true /* active */);
             }
@@ -9677,8 +9634,7 @@ void RecordThread::dumpTracks_l(int fd, const Vector<String16>& /* args */)
 void RecordThread::setRecordSilenced(audio_port_handle_t portId, bool silenced)
 {
     audio_utils::lock_guard _l(mutex());
-    for (size_t i = 0; i < mTracks.size() ; i++) {
-        sp<IAfRecordTrack> track = mTracks[i];
+    for (const auto& track : mRecordTracksView) {
         if (track != 0 && track->portId() == portId) {
             track->setSilenced(silenced);
         }
@@ -10023,8 +9979,7 @@ KeyedVector<audio_session_t, bool> RecordThread::sessionIds() const
 {
     KeyedVector<audio_session_t, bool> ids;
     audio_utils::lock_guard _l(mutex());
-    for (size_t j = 0; j < mTracks.size(); ++j) {
-        sp<IAfRecordTrack> track = mTracks[j];
+    for (const auto& track : mTracks) {
         audio_session_t sessionId = track->sessionId();
         if (ids.indexOfKey(sessionId) < 0) {
             ids.add(sessionId, true);
@@ -10175,8 +10130,8 @@ int32_t RecordThread::getOldestFront_l()
     }
     int32_t oldestFront = mRsmpInRear;
     int32_t maxFilled = 0;
-    for (size_t i = 0; i < mTracks.size(); i++) {
-        int32_t front = mTracks[i]->resamplerBufferProvider()->getFront();
+    for (const auto& track : mRecordTracksView) {
+        int32_t front = track->resamplerBufferProvider()->getFront();
         int32_t filled;
         (void)__builtin_sub_overflow(mRsmpInRear, front, &filled);
         if (filled > maxFilled) {
@@ -10195,10 +10150,10 @@ void RecordThread::updateFronts_l(int32_t offset)
     if (offset == 0) {
         return;
     }
-    for (size_t i = 0; i < mTracks.size(); i++) {
-        int32_t front = mTracks[i]->resamplerBufferProvider()->getFront();
+    for (const auto& track : mRecordTracksView) {
+        int32_t front = track->resamplerBufferProvider()->getFront();
         front = audio_utils::safe_sub_overflow(front, offset);
-        mTracks[i]->resamplerBufferProvider()->setFront(front);
+        track->resamplerBufferProvider()->setFront(front);
     }
 }
 
@@ -10421,7 +10376,6 @@ MmapThread::MmapThread(
       mSessionId(AUDIO_SESSION_NONE),
       mPortId(AUDIO_PORT_HANDLE_NONE),
       mHalStream(stream), mHalDevice(hwDev->hwDevice()), mAudioHwDev(hwDev),
-      mActiveTracks(&this->mLocalLog),
       mHalVolFloat(-1.0f), // Initialize to illegal value so it always gets set properly later.
       mNoCallbackWarningCount(0)
 {
@@ -10436,18 +10390,18 @@ void MmapThread::onFirstRef()
 
 void MmapThread::disconnect()
 {
-    ActiveTracks<IAfMmapTrack> activeTracks;
+    ActiveTracks activeTracks;
     audio_port_handle_t localPortId;
     {
         audio_utils::lock_guard _l(mutex());
-        for (const sp<IAfMmapTrack>& t : mActiveTracks) {
+        for (const auto& t : mActiveTracks) {
             activeTracks.add(t);
         }
         localPortId = mPortId;
         ALOGD("%s: localPortId = %d", __func__, localPortId);
         mPortId = AUDIO_PORT_HANDLE_NONE;
     }
-    for (const sp<IAfMmapTrack>& t : activeTracks) {
+    for (const auto& t : activeTracks) {
         ALOGD("%s: t->portId() = %d", __func__, t->portId());
         stop(t->portId());
     }
@@ -10632,7 +10586,7 @@ status_t MmapThread::start(const AudioClient& client,
     // abort if start is rejected by audio policy manager
     if (ret != NO_ERROR) {
         ALOGE("%s: error start rejected by AudioPolicyManager = %d", __FUNCTION__, ret);
-        if (!mActiveTracks.isEmpty()) {
+        if (!mActiveTracks.empty()) {
             mutex().unlock();
             if (isOutput()) {
                 AudioSystem::releaseOutput(portId);
@@ -10648,7 +10602,7 @@ status_t MmapThread::start(const AudioClient& client,
     }
 
     // Given that MmapThread::mAttr is mutable, should a MmapTrack have attributes ?
-    sp<IAfMmapTrack> track = IAfMmapTrack::create(
+    const auto track = IAfMmapTrack::create(
             this, attr == nullptr ? mAttr : *attr, mSampleRate, mFormat,
                                         mChannelMask, mSessionId, isOutput(),
                                         adjAttributionSource,
@@ -10666,7 +10620,7 @@ status_t MmapThread::start(const AudioClient& client,
         // force volume update when a new track is added
         mHalVolFloat = -1.0f;
     } else if (!track->isSilenced_l()) {
-        for (const sp<IAfMmapTrack>& t : mActiveTracks) {
+        for (const auto& t : mActiveMmapTracksView) {
             if (t->isSilenced_l()
                     && t->uid() != static_cast<uid_t>(adjAttributionSource.uid)) {
                 t->invalidate();
@@ -10712,8 +10666,8 @@ status_t MmapThread::stop(audio_port_handle_t handle)
         return NO_ERROR;
     }
 
-    sp<IAfMmapTrack> track;
-    for (const sp<IAfMmapTrack>& t : mActiveTracks) {
+    sp<IAfTrackBase> track;
+    for (const auto& t : mActiveTracks) {
         if (handle == t->portId()) {
             track = t;
             break;
@@ -10743,7 +10697,7 @@ status_t MmapThread::stop(audio_port_handle_t handle)
         chain->decTrackCnt();
     }
 
-    if (mActiveTracks.isEmpty()) {
+    if (mActiveTracks.empty()) {
         mHalStream->stop();
     }
 
@@ -10761,7 +10715,7 @@ NO_THREAD_SAFETY_ANALYSIS  // clang bug
     if (mHalStream == 0) {
         return NO_INIT;
     }
-    if (!mActiveTracks.isEmpty()) {
+    if (!mActiveTracks.empty()) {
         return INVALID_OPERATION;
     }
     mHalStream->standby();
@@ -11094,7 +11048,7 @@ status_t MmapThread::addEffectChain_l(const sp<IAfEffectChain>& chain)
     ALOGV("addEffectChain_l() %p on thread %p for session %d", chain.get(), this, session);
     // Attach all tracks with same session ID to this chain.
     // indicate all active tracks in the chain
-    for (const sp<IAfMmapTrack>& track : mActiveTracks) {
+    for (const auto& track : mActiveTracks) {
         if (session == track->sessionId()) {
             chain->incTrackCnt();
             chain->incActiveTrackCnt();
@@ -11122,7 +11076,7 @@ size_t MmapThread::removeEffectChain_l(const sp<IAfEffectChain>& chain)
             mEffectChains.removeAt(i);
             // detach all active tracks from the chain
             // detach all tracks with same session ID from this chain
-            for (const sp<IAfMmapTrack>& track : mActiveTracks) {
+            for (const auto& track : mActiveTracks) {
                 if (session == track->sessionId()) {
                     chain->decActiveTrackCnt();
                     chain->decTrackCnt();
@@ -11149,7 +11103,7 @@ void MmapThread::threadLoop_exit()
         if (callback == nullptr) {
             return;
         }
-        for (const sp<IAfMmapTrack>& track: mActiveTracks) {
+        for (const auto& track: mActiveTracks) {
             portIds.push_back(track->portId());
         }
     }
@@ -11206,7 +11160,7 @@ status_t MmapThread::checkEffectCompatibility_l(
 
 void MmapThread::checkInvalidTracks_l()
 {
-    for (const sp<IAfMmapTrack>& track : mActiveTracks) {
+    for (const auto& track : mActiveTracks) {
         if (track->isInvalid()) {
             if (const sp<MmapStreamCallback> callback = mCallback.promote()) {
                 // The aaudioservice handle the routing changed event asynchronously. In that case,
@@ -11226,7 +11180,7 @@ void MmapThread::dumpInternals_l(int fd, const Vector<String16>& /* args */)
     dprintf(fd, "  Attributes: content type %d usage %d source %d\n",
             mAttr.content_type, mAttr.usage, mAttr.source);
     dprintf(fd, "  Session: %d port Id: %d\n", mSessionId, mPortId);
-    if (mActiveTracks.isEmpty()) {
+    if (mActiveTracks.empty()) {
         dprintf(fd, "  No active clients\n");
     }
 }
@@ -11239,9 +11193,8 @@ void MmapThread::dumpTracks_l(int fd, const Vector<String16>& /* args */)
     const char *prefix = "    ";
     if (numtracks) {
         result.append(prefix);
-        mActiveTracks[0]->appendDumpHeader(result);
-        for (size_t i = 0; i < numtracks ; ++i) {
-            sp<IAfMmapTrack> track = mActiveTracks[i];
+        (*mActiveTracks.begin())->appendDumpHeader(result);
+        for (const auto& track : mActiveTracks) {
             result.append(prefix);
             track->appendDump(result, true /* active */);
         }
@@ -11375,7 +11328,7 @@ status_t MmapPlaybackThread::setPortsVolume(
         const std::vector<audio_port_handle_t>& portIds, float volume, bool muted) {
     audio_utils::lock_guard _l(mutex());
     for (const auto& portId : portIds) {
-        for (const sp<IAfMmapTrack>& track : mActiveTracks) {
+        for (const sp<IAfMmapTrack>& track : mActiveMmapTracksView) {
             if (portId == track->portId()) {
                 track->setPortVolume(volume);
                 track->setPortMute(muted);
@@ -11389,7 +11342,7 @@ status_t MmapPlaybackThread::setPortsVolume(
 
 void MmapPlaybackThread::checkUpdateTrackMetadataForUid(uid_t uid) {
     audio_utils::lock_guard _l(mutex());
-    for (const sp<IAfMmapTrack>& track : mActiveTracks) {
+    for (const auto& track : mActiveTracks) {
         if (track->uid() == uid) {
             track->setMetadataHasChanged();
         }
@@ -11400,7 +11353,7 @@ void MmapPlaybackThread::invalidateTracks(audio_stream_type_t streamType)
 {
     audio_utils::lock_guard _l(mutex());
     if (streamType == mStreamType) {
-        for (const sp<IAfMmapTrack>& track : mActiveTracks) {
+        for (const auto& track : mActiveTracks) {
             track->invalidate();
         }
         broadcast_l();
@@ -11411,7 +11364,7 @@ void MmapPlaybackThread::invalidateTracks(std::set<audio_port_handle_t>& portIds
 {
     audio_utils::lock_guard _l(mutex());
     bool trackMatch = false;
-    for (const sp<IAfMmapTrack>& track : mActiveTracks) {
+    for (const auto& track : mActiveTracks) {
         if (portIds.find(track->portId()) != portIds.end()) {
             track->invalidate();
             trackMatch = true;
@@ -11445,17 +11398,18 @@ NO_THREAD_SAFETY_ANALYSIS // access of track->processMuteEvent
             // will be broadcasted to all tracks. Thus, take arbitrarily first track volume.
             size_t numtracks = mActiveTracks.size();
             if (numtracks) {
-                if (mActiveTracks[0]->getPortMute()) {
+                const auto track = (*mActiveTracks.begin())->asIAfMmapTrack();
+                if (track->getPortMute()) {
                     volume = 0;
                 } else {
-                    volume = mMasterVolume * mActiveTracks[0]->getPortVolume();
+                    volume = mMasterVolume * track->getPortVolume();
                 }
             }
         }
     }
 
     bool shouldMutePlaybackHardening = std::all_of(mActiveTracks.begin(), mActiveTracks.end(),
-            [](const auto& x) { return x->isPlaybackRestrictedControl(); });
+            [](const auto& x) { return x->asIAfMmapTrack()->isPlaybackRestrictedControl(); });
     if (shouldMutePlaybackHardening) {
         volume = 0;
     }
@@ -11491,7 +11445,7 @@ NO_THREAD_SAFETY_ANALYSIS // access of track->processMuteEvent
             }
         }
         const auto amn = mAfThreadCallback->getAudioManagerNative();
-        for (const sp<IAfMmapTrack>& track : mActiveTracks) {
+        for (const auto& track : mActiveMmapTracksView) {
             track->setMetadataHasChanged();
             if (amn) {
                 if (!audioserver_flags::portid_volume_management()) {
@@ -11529,7 +11483,7 @@ ThreadBase::MetadataUpdate MmapPlaybackThread::updateMetadata_l()
         return {}; // nothing to do
     }
     StreamOutHalInterface::SourceMetadata metadata;
-    for (const sp<IAfMmapTrack>& track : mActiveTracks) {
+    for (const auto& track : mActiveTracks) {
         // No track is invalid as this is called after prepareTrack_l in the same critical section
         playback_track_metadata_v7_t trackMetadata;
         trackMetadata.base = {
@@ -11690,10 +11644,11 @@ void MmapCaptureThread::processVolume_l()
 
     // After a change occurred in track silenced state, mute capture in audio DSP if at least one
     // track is silenced and unmute otherwise
-    for (size_t i = 0; i < mActiveTracks.size() && !silenced; i++) {
-        if (!mActiveTracks[i]->getAndSetSilencedNotified_l()) {
+    for (const auto& track : mActiveMmapTracksView) {
+        if (!track->getAndSetSilencedNotified_l()) {
             changed = true;
-            silenced = mActiveTracks[i]->isSilenced_l();
+            silenced = track->isSilenced_l();
+            if (silenced) break;
         }
     }
 
@@ -11708,7 +11663,7 @@ ThreadBase::MetadataUpdate MmapCaptureThread::updateMetadata_l()
         return {}; // nothing to do
     }
     StreamInHalInterface::SinkMetadata metadata;
-    for (const sp<IAfMmapTrack>& track : mActiveTracks) {
+    for (const auto& track : mActiveTracks) {
         // No track is invalid as this is called after prepareTrack_l in the same critical section
         record_track_metadata_v7_t trackMetadata;
         trackMetadata.base = {
@@ -11728,9 +11683,9 @@ ThreadBase::MetadataUpdate MmapCaptureThread::updateMetadata_l()
 void MmapCaptureThread::setRecordSilenced(audio_port_handle_t portId, bool silenced)
 {
     audio_utils::lock_guard _l(mutex());
-    for (size_t i = 0; i < mActiveTracks.size() ; i++) {
-        if (mActiveTracks[i]->portId() == portId) {
-            mActiveTracks[i]->setSilenced_l(silenced);
+    for (const auto& track : mActiveMmapTracksView) {
+        if (track->portId() == portId) {
+            track->setSilenced_l(silenced);
             broadcast_l();
         }
     }
@@ -11769,7 +11724,7 @@ BitPerfectThread::BitPerfectThread(const sp<IAfThreadCallback> &afThreadCallback
         : MixerThread(afThreadCallback, output, id, systemReady, BIT_PERFECT) {}
 
 PlaybackThread::mixer_state BitPerfectThread::prepareTracks_l(
-        Vector<sp<IAfTrack>>* tracksToRemove) {
+        std::vector<sp<IAfTrackBase>>* tracksToRemove) {
     mixer_state result = MixerThread::prepareTracks_l(tracksToRemove);
     // If there is only one active track and it is bit-perfect, enable tee buffer.
     float volumeLeft = 1.0f;
@@ -11810,7 +11765,7 @@ void BitPerfectThread::threadLoop_mix() {
 void BitPerfectThread::setTracksInternalMute(
         std::map<audio_port_handle_t, bool>* tracksInternalMute) {
     audio_utils::lock_guard _l(mutex());
-    for (auto& track : mTracks) {
+    for (const auto& track : mPlaybackTracksView) {
         if (auto it = tracksInternalMute->find(track->portId()); it != tracksInternalMute->end()) {
             track->setInternalMute(it->second);
             tracksInternalMute->erase(it);
@@ -11822,7 +11777,7 @@ sp<IAfTrack> BitPerfectThread::getTrackToStreamBitPerfectly_l() {
     sp<IAfTrack> bitPerfectTrack = nullptr;
     bool allOtherTracksMuted = true;
     // Return the bit perfect track if all other tracks are muted
-    for (const auto& track : mActiveTracks) {
+    for (const auto& track : mActivePlaybackTracksView) {
         if (track->isBitPerfect()) {
             if (track->getInternalMute()) {
                 // There can only be one bit-perfect client active. If it is mute internally,
