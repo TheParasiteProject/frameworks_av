@@ -2165,6 +2165,31 @@ void ThreadBase::stopMelComputation_l()
     ALOGW("%s: ThreadBase does not support CSD", __func__);
 }
 
+status_t ThreadBase::setPortsVolume(
+        const std::vector<audio_port_handle_t>& portIds, float volume, bool muted) {
+    audio_utils::lock_guard _l(mutex());
+    for (const auto& portId : portIds) {
+        for (const auto& track : mTracks) {
+            if (portId == track->portId()) {
+                track->setPortVolume(volume);
+                track->setPortMute(muted);
+                break;
+            }
+        }
+    }
+    broadcast_l();
+    return NO_ERROR;
+}
+
+void ThreadBase::checkUpdateTrackMetadataForUid(uid_t uid) {
+    audio_utils::lock_guard _l(mutex());
+    for (const auto& track : mActiveTracks) {
+        if (track->uid() == uid) {
+            track->setMetadataHasChanged();
+        }
+    }
+}
+
 // ----------------------------------------------------------------------------
 //      Playback
 // ----------------------------------------------------------------------------
@@ -2877,34 +2902,9 @@ float PlaybackThread::streamVolume(audio_stream_type_t stream) const
     return mStreamTypes[stream].volume;
 }
 
-status_t PlaybackThread::setPortsVolume(
-        const std::vector<audio_port_handle_t>& portIds, float volume, bool muted) {
-    audio_utils::lock_guard _l(mutex());
-    for (const auto& portId : portIds) {
-        for (const auto& track : mPlaybackTracksView) {
-            if (portId == track->portId()) {
-                track->setPortVolume(volume);
-                track->setPortMute(muted);
-                break;
-            }
-        }
-    }
-    broadcast_l();
-    return NO_ERROR;
-}
-
 void PlaybackThread::setVolumeForOutput_l(float left, float right) const
 {
     mOutput->stream->setVolume(left, right);
-}
-
-void PlaybackThread::checkUpdateTrackMetadataForUid(uid_t uid) {
-    audio_utils::lock_guard _l(mutex());
-    for (const auto& track : mActiveTracks) {
-        if (track->uid() == uid) {
-            track->setMetadataHasChanged();
-        }
-    }
 }
 
 // addTrack_l() must be called with ThreadBase::mutex() held
@@ -11323,31 +11323,6 @@ void MmapPlaybackThread::setStreamMute(audio_stream_type_t stream, bool muted)
     mStreamTypes[stream].mute = muted;
     if (stream == mStreamType) {
         broadcast_l();
-    }
-}
-
-status_t MmapPlaybackThread::setPortsVolume(
-        const std::vector<audio_port_handle_t>& portIds, float volume, bool muted) {
-    audio_utils::lock_guard _l(mutex());
-    for (const auto& portId : portIds) {
-        for (const sp<IAfMmapTrack>& track : mActiveMmapTracksView) {
-            if (portId == track->portId()) {
-                track->setPortVolume(volume);
-                track->setPortMute(muted);
-                break;
-            }
-        }
-    }
-    broadcast_l();
-    return NO_ERROR;
-}
-
-void MmapPlaybackThread::checkUpdateTrackMetadataForUid(uid_t uid) {
-    audio_utils::lock_guard _l(mutex());
-    for (const auto& track : mActiveTracks) {
-        if (track->uid() == uid) {
-            track->setMetadataHasChanged();
-        }
     }
 }
 
