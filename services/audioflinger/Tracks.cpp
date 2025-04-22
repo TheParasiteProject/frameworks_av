@@ -884,7 +884,7 @@ Track::Track(
             float volume,
             bool muted)
     :
-    AfPlaybackCommon(*this, *thread, volume, muted,
+    AfPlaybackCommon(*this, *thread,
                      attr, attributionSource, thread->isOffloadOrMmap(), type != TYPE_PATCH),
     TrackBase(thread, client, attr, sampleRate, format, channelMask, frameCount,
                   // TODO: Using unsecurePointer() has some associated security pitfalls
@@ -974,6 +974,9 @@ Track::Track(
             || mAttr.usage == AUDIO_USAGE_VIRTUAL_SOURCE) {
         setPortVolume(1.0f);
         setPortMute(false);
+    } else {
+        setPortVolume(volume);
+        setPortMute(muted);
     }
 
     mServerLatencySupported = checkServerLatencySupported(format, flags);
@@ -2345,8 +2348,7 @@ OutputTrack::OutputTrack(
             size_t frameCount,
             const AttributionSourceState& attributionSource)
     :
-    AfPlaybackCommon(*this, *playbackThread, /* volume= */ 0.0f,
-                     /* muted= */ false,
+    AfPlaybackCommon(*this, *playbackThread,
                      AUDIO_ATTRIBUTES_INITIALIZER, attributionSource, /* isOffloadOrMmap= */ false,
                      /* shouldPlaybackHarden= */ false),
     Track(playbackThread, NULL, AUDIO_STREAM_PATCH,
@@ -2657,7 +2659,7 @@ PatchTrack::PatchTrack(IAfPlaybackThread* playbackThread,
                                                      float speed,
                                                      float volume,
                                                      bool muted)
-    : AfPlaybackCommon(*this, *playbackThread, volume, muted,
+    : AfPlaybackCommon(*this, *playbackThread,
                        AUDIO_ATTRIBUTES_INITIALIZER,
                        audioServerAttributionSource(getpid()),
                        /* isOffloadOrMmap= */ false,
@@ -3710,14 +3712,12 @@ static AfPlaybackCommon::EnforcementLevel getOpControlEnforcementLevel(audio_usa
     }
 }
 
-AfPlaybackCommon::AfPlaybackCommon(IAfTrackBase& self, IAfThreadBase& thread, float volume,
-                                   bool muted, const audio_attributes_t& attr,
+AfPlaybackCommon::AfPlaybackCommon(IAfTrackBase& self, IAfThreadBase& thread,
+                                   const audio_attributes_t& attr,
                                    const AttributionSourceState& attributionSource,
                                    bool isOffloadOrMmap,
                                    bool shouldPlaybackHarden)
     : mSelf(self),
-      mMutedFromPort(muted),
-      mVolume(volume),
       mEnforcementLevel(getOpControlEnforcementLevel(attr.usage, *thread.afThreadCallback())) {
     ALOGI("creating track with enforcement level %d", mEnforcementLevel);
     using AppOpsManager::OP_CONTROL_AUDIO_PARTIAL;
@@ -3878,7 +3878,7 @@ MmapTrack::MmapTrack(IAfThreadBase* thread,
         float volume,
         bool muted)
     :   AfPlaybackCommon(*this, *thread,
-                         volume, muted, attr, attributionSource, /* isOffloadOrMmap */ true),
+                         attr, attributionSource, /* isOffloadOrMmap */ true),
         TrackBase(thread, NULL, attr, sampleRate, format,
                   channelMask, (size_t)0 /* frameCount */,
                   nullptr /* buffer */, (size_t)0 /* bufferSize */,
@@ -3899,6 +3899,9 @@ MmapTrack::MmapTrack(IAfThreadBase* thread,
         // Audio patch and call assistant volume are always max
         setPortVolume(1.0f);
         setPortMute(false);
+    } else {
+        setPortVolume(volume);
+        setPortMute(muted);
     }
 }
 
