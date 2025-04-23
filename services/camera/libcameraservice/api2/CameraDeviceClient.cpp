@@ -2563,7 +2563,9 @@ size_t CameraDeviceClient::writeResultMetadataIntoResultQueue(
         return resultSize;
     }
     resultMetadata.unlock(resultMetadataP);
-    ALOGE(" %s couldn't write metadata into result queue ", __FUNCTION__);
+    ALOGE(" %s couldn't write metadata into result queue, result size %zu, "
+        "fmq availableToWrite %zu ", __FUNCTION__, resultSize,
+        mResultMetadataQueue->availableToWrite());
     return 0;
 }
 
