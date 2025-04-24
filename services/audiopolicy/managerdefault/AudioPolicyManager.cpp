@@ -191,6 +191,30 @@ status_t AudioPolicyManager::setDeviceConnectionStateInt(audio_devices_t deviceT
     }
 }
 
+void AudioPolicyManager::addRoutableDeviceToProfiles(const sp<DeviceDescriptor> &device)
+{
+    for (auto &hwModule: mHwModules) {
+        const auto& profiles = audio_is_output_device(device->type())
+              ? hwModule->getOutputProfiles() : hwModule->getInputProfiles();
+
+        for (auto& profile : profiles) {
+            struct audio_port_v7 devicePort{};
+            device->toAudioPort(&devicePort);
+
+            struct audio_port_v7 mixPort{};
+            profile->toAudioPort(&mixPort);
+
+            bool isRoutable = profile->supportsDevice(device) &&
+                  mpClientInterface->getAudioMixPort(&devicePort, &mixPort,
+                                                     profile->getHalId()) == OK;
+
+            if (isRoutable) {
+                profile->addRoutableDevice(device);
+            }
+        }
+    }
+}
+
 status_t AudioPolicyManager::setDeviceConnectionStateInt(const sp<DeviceDescriptor> &device,
                                                          audio_policy_dev_state_t state,
                                                          bool deviceSwitch)
@@ -233,6 +257,8 @@ status_t AudioPolicyManager::setDeviceConnectionStateInt(const sp<DeviceDescript
                       device->toString().c_str(), device->getEncodedFormat());
                 return INVALID_OPERATION;
             }
+
+            addRoutableDeviceToProfiles(device);
 
             if (checkOutputsForDevice(device, state, outputs) != NO_ERROR) {
                 mAvailableOutputDevices.remove(device);
@@ -430,6 +456,8 @@ status_t AudioPolicyManager::setDeviceConnectionStateInt(const sp<DeviceDescript
             // Propagate device availability to Engine
             setEngineDeviceConnectionState(device, state);
 
+            addRoutableDeviceToProfiles(device);
+
             if (checkInputsForDevice(device, state) != NO_ERROR) {
                 setEngineDeviceConnectionState(device, AUDIO_POLICY_DEVICE_STATE_UNAVAILABLE);
 
@@ -441,7 +469,6 @@ status_t AudioPolicyManager::setDeviceConnectionStateInt(const sp<DeviceDescript
 
                 return INVALID_OPERATION;
             }
-
         } break;
 
         // handle input device disconnection
