@@ -10701,7 +10701,7 @@ status_t MmapThread::start(const AudioClient& client,
 status_t MmapThread::stop(audio_port_handle_t handle)
 {
     ALOGV("%s handle %d", __FUNCTION__, handle);
-    audio_utils::lock_guard l(mutex());
+    audio_utils::unique_lock l {mutex()};
 
     if (mHalStream == 0) {
         return NO_INIT;
@@ -10727,7 +10727,7 @@ status_t MmapThread::stop(audio_port_handle_t handle)
     eraseClientSilencedState_l(track->portId());
     track->stop();
 
-    mutex().unlock();
+    l.unlock();
     if (isOutput()) {
         AudioSystem::stopOutput(track->portId());
         AudioSystem::releaseOutput(track->portId());
@@ -10735,7 +10735,7 @@ status_t MmapThread::stop(audio_port_handle_t handle)
         AudioSystem::stopInput(track->portId());
         AudioSystem::releaseInput(track->portId());
     }
-    mutex().lock();
+    l.lock();
 
     sp<IAfEffectChain> chain = getEffectChain_l(track->sessionId());
     if (chain != 0) {
@@ -10749,6 +10749,8 @@ status_t MmapThread::stop(audio_port_handle_t handle)
 
     broadcast_l();
 
+    // unlock before running track dtor to prevent join deadlock
+    l.unlock();
     return NO_ERROR;
 }
 
