@@ -551,7 +551,7 @@ void AudioPolicyManagerTestMsd::SetUpManagerConfig() {
 
         sp<OutputProfile> spdifOutputProfile = new OutputProfile("spdif output");
         spdifOutputProfile->addAudioProfile(pcmOutputProfile);
-        spdifOutputProfile->addSupportedDevice(mSpdifDevice);
+        spdifOutputProfile->addSupportedRoutableDevice(mSpdifDevice);
         mConfig->getHwModules().getModuleFromName(AUDIO_HARDWARE_MODULE_ID_PRIMARY)->
                 addOutputProfile(spdifOutputProfile);
     }
@@ -563,24 +563,24 @@ void AudioPolicyManagerTestMsd::SetUpManagerConfig() {
 
     sp<OutputProfile> msdOutputProfile = new OutputProfile("msd input");
     msdOutputProfile->addAudioProfile(pcmOutputProfile);
-    msdOutputProfile->addSupportedDevice(mMsdOutputDevice);
+    msdOutputProfile->addSupportedRoutableDevice(mMsdOutputDevice);
     msdModule->addOutputProfile(msdOutputProfile);
     sp<OutputProfile> msdCompressedOutputProfile = new OutputProfile("msd compressed input");
     msdCompressedOutputProfile->addAudioProfile(ac3OutputProfile);
     msdCompressedOutputProfile->setFlags(
             AUDIO_OUTPUT_FLAG_DIRECT | AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD |
             AUDIO_OUTPUT_FLAG_NON_BLOCKING);
-    msdCompressedOutputProfile->addSupportedDevice(mMsdOutputDevice);
+    msdCompressedOutputProfile->addSupportedRoutableDevice(mMsdOutputDevice);
     msdModule->addOutputProfile(msdCompressedOutputProfile);
     sp<OutputProfile> msdIec958OutputProfile = new OutputProfile("msd iec958 input");
     msdIec958OutputProfile->addAudioProfile(iec958OutputProfile);
     msdIec958OutputProfile->setFlags(AUDIO_OUTPUT_FLAG_DIRECT);
-    msdIec958OutputProfile->addSupportedDevice(mMsdOutputDevice);
+    msdIec958OutputProfile->addSupportedRoutableDevice(mMsdOutputDevice);
     msdModule->addOutputProfile(msdIec958OutputProfile);
 
     sp<InputProfile> msdInputProfile = new InputProfile("msd output");
     msdInputProfile->addAudioProfile(pcmInputProfile);
-    msdInputProfile->addSupportedDevice(mMsdInputDevice);
+    msdInputProfile->addSupportedRoutableDevice(mMsdInputDevice);
     msdModule->addInputProfile(msdInputProfile);
 
     // Add a profile with another encoding to the default device to test routing
@@ -591,14 +591,14 @@ void AudioPolicyManagerTestMsd::SetUpManagerConfig() {
     sp<OutputProfile> primaryEncodedOutputProfile = new OutputProfile("encoded");
     primaryEncodedOutputProfile->addAudioProfile(dtsOutputProfile);
     primaryEncodedOutputProfile->setFlags(AUDIO_OUTPUT_FLAG_DIRECT);
-    primaryEncodedOutputProfile->addSupportedDevice(mConfig->getDefaultOutputDevice());
+    primaryEncodedOutputProfile->addSupportedRoutableDevice(mConfig->getDefaultOutputDevice());
     mConfig->getHwModules().getModuleFromName(AUDIO_HARDWARE_MODULE_ID_PRIMARY)->
             addOutputProfile(primaryEncodedOutputProfile);
 
     mDefaultOutputDevice = mConfig->getDefaultOutputDevice();
     if (mExpectedAudioPatchCount == 3) {
         mSpdifDevice->addAudioProfile(dtsOutputProfile);
-        primaryEncodedOutputProfile->addSupportedDevice(mSpdifDevice);
+        primaryEncodedOutputProfile->addSupportedRoutableDevice(mSpdifDevice);
     }
 
     // Add HDMI input device with IEC60958 profile for HDMI in -> MSD patching.
@@ -610,7 +610,7 @@ void AudioPolicyManagerTestMsd::SetUpManagerConfig() {
     sp<InputProfile> hdmiInputProfile = new InputProfile("hdmi input");
     hdmiInputProfile->addAudioProfile(iec958InputProfile);
     hdmiInputProfile->setFlags(AUDIO_INPUT_FLAG_DIRECT);
-    hdmiInputProfile->addSupportedDevice(mHdmiInputDevice);
+    hdmiInputProfile->addSupportedRoutableDevice(mHdmiInputDevice);
     mConfig->getHwModules().getModuleFromName(AUDIO_HARDWARE_MODULE_ID_PRIMARY)->
             addInputProfile(hdmiInputProfile);
 }
