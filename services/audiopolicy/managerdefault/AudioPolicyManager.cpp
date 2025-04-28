@@ -74,7 +74,6 @@ using android::media::audio::common::AudioPortDeviceExt;
 using android::media::audio::common::AudioPortExt;
 using android::media::audio::common::AudioConfigBase;
 using binder::Status;
-using com::android::media::audioserver::fix_call_audio_patch;
 using com::android::media::audioserver::use_bt_sco_for_media;
 using com::android::media::audioserver::remove_stream_suspend;
 using content::AttributionSourceState;
@@ -740,11 +739,6 @@ status_t AudioPolicyManager::updateCallRoutingInternal(
     audio_attributes_t attr = { .source = AUDIO_SOURCE_VOICE_COMMUNICATION };
     auto txSourceDevice = mEngine->getInputDeviceForAttributes(attr);
 
-    if (!fix_call_audio_patch()) {
-        disconnectTelephonyAudioSource(mCallRxSourceClient);
-        disconnectTelephonyAudioSource(mCallTxSourceClient);
-    }
-
     if (rxDevices.isEmpty()) {
         ALOGW("%s() no selected output device", __func__);
         return INVALID_OPERATION;
@@ -796,9 +790,7 @@ status_t AudioPolicyManager::updateCallRoutingInternal(
     // Use legacy routing method for voice calls via setOutputDevice() on primary output.
     // Otherwise, create two audio patches for TX and RX path.
     if (!createRxPatch) {
-        if (fix_call_audio_patch()) {
-            disconnectTelephonyAudioSource(mCallRxSourceClient);
-        }
+        disconnectTelephonyAudioSource(mCallRxSourceClient);
         if (!hasPrimaryOutput()) {
             ALOGW("%s() no primary output available", __func__);
             return INVALID_OPERATION;
@@ -821,7 +813,7 @@ status_t AudioPolicyManager::updateCallRoutingInternal(
             }
         }
         connectTelephonyTxAudioSource(txSourceDevice, txSinkDevice, delayMs);
-    } else if (fix_call_audio_patch()) {
+    } else {
         disconnectTelephonyAudioSource(mCallTxSourceClient);
     }
     if (waitMs != nullptr) {
@@ -846,20 +838,16 @@ void AudioPolicyManager::connectTelephonyRxAudioSource(uint32_t delayMs)
 {
     const auto aa = mEngine->getAttributesForStreamType(AUDIO_STREAM_VOICE_CALL);
 
-    if (fix_call_audio_patch()) {
-        if (mCallRxSourceClient != nullptr) {
-            DeviceVector rxDevices =
-                  mEngine->getOutputDevicesForAttributes(aa, nullptr, false /*fromCache*/);
-            ALOG_ASSERT(!rxDevices.isEmpty() || !mCallRxSourceClient->isConnected(),
-                        "connectTelephonyRxAudioSource(): no device found for call RX source");
-            sp<DeviceDescriptor> rxDevice = rxDevices.itemAt(0);
-            if (mCallRxSourceClient->isConnected()
-                    && mCallRxSourceClient->sinkDevice()->equals(rxDevice)) {
-                return;
-            }
-            disconnectTelephonyAudioSource(mCallRxSourceClient);
+    if (mCallRxSourceClient != nullptr) {
+        DeviceVector rxDevices =
+              mEngine->getOutputDevicesForAttributes(aa, nullptr, false /*fromCache*/);
+        ALOG_ASSERT(!rxDevices.isEmpty() || !mCallRxSourceClient->isConnected(),
+                    "connectTelephonyRxAudioSource(): no device found for call RX source");
+        sp<DeviceDescriptor> rxDevice = rxDevices.itemAt(0);
+        if (mCallRxSourceClient->isConnected()
+                && mCallRxSourceClient->sinkDevice()->equals(rxDevice)) {
+            return;
         }
-    } else {
         disconnectTelephonyAudioSource(mCallRxSourceClient);
     }
 
@@ -899,15 +887,11 @@ void AudioPolicyManager::connectTelephonyTxAudioSource(
         return;
     }
 
-    if (fix_call_audio_patch()) {
-        if (mCallTxSourceClient != nullptr) {
-            if (mCallTxSourceClient->isConnected()
-                    && mCallTxSourceClient->srcDevice()->equals(srcDevice)) {
-                return;
-            }
-            disconnectTelephonyAudioSource(mCallTxSourceClient);
+    if (mCallTxSourceClient != nullptr) {
+        if (mCallTxSourceClient->isConnected()
+                && mCallTxSourceClient->srcDevice()->equals(srcDevice)) {
+            return;
         }
-    } else {
         disconnectTelephonyAudioSource(mCallTxSourceClient);
     }
 
