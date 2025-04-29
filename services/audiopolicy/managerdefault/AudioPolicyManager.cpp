@@ -1529,9 +1529,7 @@ status_t AudioPolicyManager::getOutputForAttr(const audio_attributes_t *attr,
                                               std::vector<audio_io_handle_t> *secondaryOutputs,
                                               output_type_t *outputType,
                                               bool *isSpatialized,
-                                              bool *isBitPerfect,
-                                              float *volume,
-                                              bool *muted)
+                                              bool *isBitPerfect)
 {
     // The supplied portId must be AUDIO_PORT_HANDLE_NONE
     if (*portId != AUDIO_PORT_HANDLE_NONE) {
@@ -1590,9 +1588,6 @@ status_t AudioPolicyManager::getOutputForAttr(const audio_attributes_t *attr,
                                   std::move(weakSecondaryOutputDescs),
                                   outputDesc->mPolicyMix);
     outputDesc->addClient(clientDesc);
-
-    *volume = Volume::DbToAmpl(outputDesc->getCurVolume(toVolumeSource(resultAttr)));
-    *muted = outputDesc->isMutedByGroup(toVolumeSource(resultAttr));
 
     ALOGV("%s() returns output %d requestedPortIds %s selectedDeviceIds %s for port ID %d",
           __func__, *output, toString(requestedDeviceIds).c_str(),
@@ -2345,7 +2340,8 @@ audio_io_handle_t AudioPolicyManager::selectOutput(const SortedVector<audio_io_h
     return bestOutput;
 }
 
-status_t AudioPolicyManager::startOutput(audio_port_handle_t portId)
+status_t AudioPolicyManager::startOutput(
+        audio_port_handle_t portId, float* volume, bool* muted)
 {
     ALOGV("%s portId %d", __FUNCTION__, portId);
 
@@ -2456,11 +2452,24 @@ status_t AudioPolicyManager::startOutput(audio_port_handle_t portId)
         usleep(delayMs * 1000);
     }
 
-    if (status == NO_ERROR &&
-        outputDesc->mPreferredAttrInfo != nullptr &&
-        outputDesc->isBitPerfect()) {
-        // A new client is started on bit-perfect output, update all clients internal mute.
-        updateClientsInternalMute(outputDesc);
+    if (status == NO_ERROR) {
+        if (outputDesc->mPreferredAttrInfo != nullptr &&
+                outputDesc->isBitPerfect()) {
+            // A new client is started on bit-perfect output, update all clients internal mute.
+            updateClientsInternalMute(outputDesc);
+        }
+
+        const auto& attr = client->attributes();
+        if (attr.usage == AUDIO_USAGE_CALL_ASSISTANT
+                || attr.usage == AUDIO_USAGE_VIRTUAL_SOURCE) {
+            // Audio patch and call assistant volume are always max
+            *volume = 1.f;
+            *muted = false;
+        } else {
+            *volume = Volume::DbToAmpl(
+                    outputDesc->getCurVolume(toVolumeSource(attr)));
+            *muted = outputDesc->isMutedByGroup(toVolumeSource(attr));
+        }
     }
 
     return status;

@@ -2456,9 +2456,7 @@ sp<IAfTrack> PlaybackThread::createTrack_l(
         const sp<media::IAudioTrackCallback>& callback,
         bool isSpatialized,
         bool isBitPerfect,
-        audio_output_flags_t *afTrackFlags,
-        float volume,
-        bool muted)
+        audio_output_flags_t *afTrackFlags)
 {
     size_t frameCount = *pFrameCount;
     size_t notificationFrameCount = *pNotificationFrameCount;
@@ -2786,7 +2784,7 @@ sp<IAfTrack> PlaybackThread::createTrack_l(
                           nullptr /* buffer */, (size_t)0 /* bufferSize */, sharedBuffer,
                           sessionId, creatorPid, attributionSource, trackFlags,
                           IAfTrackBase::TYPE_DEFAULT, portId, SIZE_MAX /*frameCountToBeReady*/,
-                          speed, isSpatialized, isBitPerfect, volume, muted);
+                          speed, isSpatialized, isBitPerfect);
 
         lStatus = track != 0 ? track->initCheck() : (status_t) NO_MEMORY;
         if (lStatus != NO_ERROR) {
@@ -2920,8 +2918,10 @@ status_t PlaybackThread::addTrack_l(const sp<IAfTrack>& track)
             IAfTrackBase::track_state state = track->state();
             // Because the track is not on the ActiveTracks,
             // at this point, only the TrackHandle will be adding the track.
+            float volume;
+            bool muted;
             mutex().unlock();
-            status = AudioSystem::startOutput(track->portId());
+            status = AudioSystem::startOutput(track->portId(), &volume, &muted);
             mutex().lock();
             // abort track was stopped/paused while we released the lock
             if (state != track->state()) {
@@ -2940,6 +2940,8 @@ status_t PlaybackThread::addTrack_l(const sp<IAfTrack>& track)
                 // immediately.
                 return status == DEAD_OBJECT ? status : PERMISSION_DENIED;
             }
+            track->setPortVolume(volume);
+            track->setPortMute(muted);
 #ifdef ADD_BATTERY_DATA
             // to track the speaker usage
             addBatteryData(IMediaPlayerService::kBatteryDataAudioFlingerStart);
@@ -10509,8 +10511,7 @@ status_t MmapThread::start(const AudioClient& client,
 
     const auto localSessionId = mSessionId;
     auto localAttr = mAttr;
-    float volume = 0.0f;
-    bool muted = false;
+
     if (isOutput()) {
         audio_config_t config = AUDIO_CONFIG_INITIALIZER;
         config.sample_rate = mSampleRate;
@@ -10534,9 +10535,7 @@ status_t MmapThread::start(const AudioClient& client,
                                             &portId,
                                             &secondaryOutputs,
                                             &isSpatialized,
-                                            &isBitPerfect,
-                                            &volume,
-                                            &muted);
+                                            &isBitPerfect);
         mutex().lock();
         mAttr = localAttr;
         ALOGD_IF(!secondaryOutputs.empty(),
@@ -10570,9 +10569,11 @@ status_t MmapThread::start(const AudioClient& client,
         return BAD_VALUE;
     }
 
+    float volume{};
+    bool muted{};
     if (isOutput()) {
         mutex().unlock();
-        ret = AudioSystem::startOutput(portId);
+        ret = AudioSystem::startOutput(portId, &volume, &muted);
         mutex().lock();
     } else {
         {
@@ -10608,9 +10609,12 @@ status_t MmapThread::start(const AudioClient& client,
             this, attr == nullptr ? mAttr : *attr, mSampleRate, mFormat,
                                         mChannelMask, mSessionId, isOutput(),
                                         adjAttributionSource,
-                                        IPCThreadState::self()->getCallingPid(), portId,
-                                        volume, muted);
+                                        IPCThreadState::self()->getCallingPid(), portId);
 
+    if (isOutput()) {
+        track->setPortVolume(volume);
+        track->setPortMute(muted);
+    }
     // MMAP tracks are only created when they are started, so mark them as Start for the purposes
     // of the IAfTrackBase interface
     track->start();
