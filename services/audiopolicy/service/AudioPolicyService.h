@@ -120,7 +120,7 @@ public:
                                     const AudioConfig& config,
                                     int32_t flags, const std::vector<int32_t>& selectedDeviceIds,
                                     media::GetOutputForAttrResponse* _aidl_return) override;
-    binder::Status startOutput(int32_t portId) override;
+    binder::Status startOutput(int32_t portId, media::StartOutputResponse* _aidl_return) override;
     binder::Status stopOutput(int32_t portId) override;
     binder::Status releaseOutput(int32_t portId) override;
     binder::Status getInputForAttr(const media::audio::common::AudioAttributes& attr, int32_t input,

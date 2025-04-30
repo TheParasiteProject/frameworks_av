@@ -1109,9 +1109,7 @@ public:
                                 const sp<media::IAudioTrackCallback>& callback,
                                 bool isSpatialized,
                                 bool isBitPerfect,
-                                audio_output_flags_t* afTrackFlags,
-                                float volume,
-                                bool muted) final
+                                audio_output_flags_t* afTrackFlags) final
             REQUIRES(audio_utils::AudioFlinger_Mutex);
 
     bool isTrackActive_l(const sp<IAfTrack>& track) const final REQUIRES(mutex()) {

@@ -483,8 +483,6 @@ Status AudioPolicyService::getOutputForAttr(const media::audio::common::AudioAtt
     AudioPolicyInterface::output_type_t outputType;
     bool isSpatialized = false;
     bool isBitPerfect = false;
-    float volume;
-    bool muted;
     status_t result = mAudioPolicyManager->getOutputForAttr(&attr, &output, session,
                                                             &stream,
                                                             attributionSource,
@@ -493,9 +491,7 @@ Status AudioPolicyService::getOutputForAttr(const media::audio::common::AudioAtt
                                                             &secondaryOutputs,
                                                             &outputType,
                                                             &isSpatialized,
-                                                            &isBitPerfect,
-                                                            &volume,
-                                                            &muted);
+                                                            &isBitPerfect);
 
     // FIXME: Introduce a way to check for the the telephony device before opening the output
     if (result == NO_ERROR) {
@@ -563,8 +559,6 @@ Status AudioPolicyService::getOutputForAttr(const media::audio::common::AudioAtt
         _aidl_return->isBitPerfect = isBitPerfect;
         _aidl_return->attr = VALUE_OR_RETURN_BINDER_STATUS(
                 legacy2aidl_audio_attributes_t_AudioAttributes(attr));
-        _aidl_return->volume = volume;
-        _aidl_return->muted = muted;
     } else {
         _aidl_return->configBase.format = VALUE_OR_RETURN_BINDER_STATUS(
                 legacy2aidl_audio_format_t_AudioFormatDescription(config.format));
@@ -591,7 +585,8 @@ void AudioPolicyService::getPlaybackClientAndEffects(audio_port_handle_t portId,
     effects = mAudioPolicyEffects;
 }
 
-Status AudioPolicyService::startOutput(int32_t portIdAidl)
+Status AudioPolicyService::startOutput(
+        int32_t portIdAidl, media::StartOutputResponse* _aidl_return)
 {
     audio_port_handle_t portId = VALUE_OR_RETURN_BINDER_STATUS(
             aidl2legacy_int32_t_audio_port_handle_t(portIdAidl));
@@ -614,7 +609,9 @@ Status AudioPolicyService::startOutput(int32_t portIdAidl)
     }
     audio_utils::lock_guard _l(mMutex);
     AutoCallerClear acc;
-    status_t status = mAudioPolicyManager->startOutput(portId);
+    float volume;
+    bool muted;
+    status_t status = mAudioPolicyManager->startOutput(portId, &volume, &muted);
     if (status == NO_ERROR) {
         //TODO b/257922898: decide if/how we need to handle attributes update when playback starts
         // or during playback
@@ -622,6 +619,8 @@ Status AudioPolicyService::startOutput(int32_t portIdAidl)
                 client->attributes, nullptr /* callback */);
         client->active = true;
         onUpdateActiveSpatializerTracks_l();
+        _aidl_return->volume = volume;
+        _aidl_return->muted = muted;
     }
     return binderStatusFromStatusT(status);
 }
