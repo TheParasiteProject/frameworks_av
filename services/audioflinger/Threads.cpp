@@ -7628,6 +7628,12 @@ PlaybackThread::mixer_state OffloadThread::prepareTracks_l(
                 }
                 mActiveTrack = t->asIAfTrack();
                 mixerStatus = MIXER_TRACKS_READY;
+
+                // start after flush needs a resume here.
+                if (mHwPaused) {
+                    doHwResume = true;
+                    mHwPaused = false;
+                }
             }
         } else {
             ALOGVV("OffloadThread: track(%d) s=%08x [NOT READY]", track->id(), cblk->mServer);
