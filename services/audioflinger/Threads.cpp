@@ -2418,6 +2418,9 @@ void PlaybackThread::dumpInternals_l(int fd, const Vector<String16>& args)
     dprintf(fd, "  Suspend count: %d\n", (int32_t)mSuspended);
     dprintf(fd, "  Fast track availMask=%#x\n", mFastTrackAvailMask);
     dprintf(fd, "  Standby delay ns=%lld\n", (long long)mStandbyDelayNs);
+    dprintf(fd, "  Hw supports pause: %s\n", mHwSupportsPause ? "yes" : "no");
+    dprintf(fd, "  Hw paused: %s\n", mHwPaused ? "yes" : "no");
+    dprintf(fd, "  Flush pending: %s\n", mFlushPending ? "yes" : "no");
     AudioStreamOut *output = mOutput;
     audio_output_flags_t flags = output != NULL ? output->flags : AUDIO_OUTPUT_FLAG_NONE;
     dprintf(fd, "  AudioStreamOut: %p flags %#x (%s)\n",

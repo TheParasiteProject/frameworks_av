@@ -1436,9 +1436,9 @@ status_t Track::start(AudioSystem::sync_event_t event __unused,
                         __func__,  mId, (int)mThreadIoHandle);
             }
         } else {
+            ALOGV("%s(%d): %s => ACTIVE on thread %d",
+                    __func__, mId, getTrackStateAsString(), (int)mThreadIoHandle);
             mState = TrackBase::ACTIVE;
-            ALOGV("%s(%d): ? => ACTIVE on thread %d",
-                    __func__, mId, (int)mThreadIoHandle);
         }
 
         auto* const playbackThread = thread->asIAfPlaybackThread().get();
