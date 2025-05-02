@@ -3397,7 +3397,11 @@ void EffectChain::EffectCallback::checkSuspendOnEffectEnabled(const sp<IAfEffect
         t->mutex().lock();
     }
 
-    c->checkSuspendOnEffectEnabled_l(effect->asEffectModule(), enabled);
+    sp<IAfEffectModule> em = effect->asEffectModule();
+    if (em == nullptr) {
+        return;
+    }
+    c->checkSuspendOnEffectEnabled_l(em, enabled);
 
     if (!threadLocked) {
         t->mutex().unlock();
