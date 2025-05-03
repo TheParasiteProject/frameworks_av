@@ -293,7 +293,7 @@ binder::Status Camera2ClientBase<TClientBase>::disconnectImpl() {
     // deadlock while acquiring service lock in cacheDump.
     if (!TClientBase::mDisconnected) {
         ALOGD("Camera %s: start to cacheDump", TClientBase::mCameraIdStr.c_str());
-        Camera2ClientBase::getCameraService()->cacheDump();
+        Camera2ClientBase::getCameraService()->cacheDump(TClientBase::mCameraIdStr);
     }
 
     detachDevice();

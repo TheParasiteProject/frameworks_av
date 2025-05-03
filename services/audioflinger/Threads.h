@@ -1109,9 +1109,7 @@ public:
                                 const sp<media::IAudioTrackCallback>& callback,
                                 bool isSpatialized,
                                 bool isBitPerfect,
-                                audio_output_flags_t* afTrackFlags,
-                                float volume,
-                                bool muted) final
+                                audio_output_flags_t* afTrackFlags) final
             REQUIRES(audio_utils::AudioFlinger_Mutex);
 
     bool isTrackActive_l(const sp<IAfTrack>& track) const final REQUIRES(mutex()) {
@@ -1449,9 +1447,9 @@ protected:
     virtual uint32_t correctLatency_l(uint32_t latency) const REQUIRES(mutex());
 
     virtual     status_t    createAudioPatch_l(const struct audio_patch *patch,
-            audio_patch_handle_t *handle) REQUIRES(mutex());
+            audio_patch_handle_t *handle) REQUIRES(mutex(), ThreadBase_ThreadLoop);
     virtual status_t releaseAudioPatch_l(const audio_patch_handle_t handle)
-            REQUIRES(mutex());
+            REQUIRES(mutex(), ThreadBase_ThreadLoop);
 
     // NO_THREAD_SAFETY_ANALYSIS - fix this to use atomics
     bool usesHwAvSync() const final { return mType == DIRECT && mOutput != nullptr
@@ -1674,8 +1672,9 @@ protected:
 
     status_t createAudioPatch_l(
             const struct audio_patch* patch, audio_patch_handle_t* handle)
-            final REQUIRES(mutex());
-    status_t releaseAudioPatch_l(const audio_patch_handle_t handle) final REQUIRES(mutex());
+            final REQUIRES(mutex(), ThreadBase_ThreadLoop);
+    status_t releaseAudioPatch_l(const audio_patch_handle_t handle)
+            final REQUIRES(mutex(), ThreadBase_ThreadLoop);
 
                 AudioMixer* mAudioMixer;    // normal mixer
 
@@ -2071,8 +2070,9 @@ public:
     void ioConfigChanged_l(audio_io_config_event_t event, pid_t pid = 0,
             audio_port_handle_t portId = AUDIO_PORT_HANDLE_NONE) final;
     virtual status_t    createAudioPatch_l(const struct audio_patch *patch,
-            audio_patch_handle_t *handle) REQUIRES(mutex());
-    virtual status_t releaseAudioPatch_l(const audio_patch_handle_t handle) REQUIRES(mutex());
+            audio_patch_handle_t *handle) REQUIRES(mutex(), ThreadBase_ThreadLoop);
+    status_t releaseAudioPatch_l(const audio_patch_handle_t handle)
+            override REQUIRES(mutex(), ThreadBase_ThreadLoop);
     void updateOutDevices(const DeviceDescriptorBaseVector& outDevices) override
             EXCLUDES_ThreadBase_Mutex;
     void resizeInputBuffer_l(int32_t maxSharedAudioHistoryMs) override REQUIRES(mutex());
@@ -2313,9 +2313,9 @@ class MmapThread : public ThreadBase, public virtual IAfMmapThread
     void cacheParameters_l() final REQUIRES(mutex(), ThreadBase_ThreadLoop) {}
     status_t createAudioPatch_l(
             const struct audio_patch* patch, audio_patch_handle_t* handle) final
-            REQUIRES(mutex());
+            REQUIRES(mutex(), ThreadBase_ThreadLoop);
     status_t releaseAudioPatch_l(const audio_patch_handle_t handle) final
-            REQUIRES(mutex());
+            REQUIRES(mutex(), ThreadBase_ThreadLoop);
     // NO_THREAD_SAFETY_ANALYSIS
     void toAudioPortConfig(struct audio_port_config* config) override;
 
