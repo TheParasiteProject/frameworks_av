@@ -2976,6 +2976,11 @@ static const effect_uuid_t SL_IID_DAP_ = { 0x46d279d9, 0x9be7, 0x453d, 0x9d7c,
                                          { 0xef, 0x93, 0x7f, 0x67, 0x55, 0x87 } };
 const effect_uuid_t * const SL_IID_DAP = &SL_IID_DAP_;
 
+// Dolby Atmos SW
+static const effect_uuid_t SL_IID_DAP_SW_ = { 0x9d4921da, 0x8225, 0x4f29, 0xaefa,
+                                            { 0x39, 0x53, 0x7a, 0x04, 0xbc, 0xaa} };
+const effect_uuid_t * const SL_IID_DAP_SW = &SL_IID_DAP_SW_;
+
 // ViperFx
 static const effect_uuid_t SL_V4A_RE_ = { 0x90380da3, 0x8536, 0x4744, 0xa6a3,
                                         { 0x57, 0x31, 0x97, 0x0e, 0x64, 0x0f} };
@@ -2998,6 +3003,7 @@ bool EffectChain::isEffectEligibleForSuspend(const effect_descriptor_t& desc)
         (((desc.flags & EFFECT_FLAG_TYPE_MASK) == EFFECT_FLAG_TYPE_AUXILIARY) ||
          (memcmp(&desc.type, SL_IID_VISUALIZATION, sizeof(effect_uuid_t)) == 0) ||
          (memcmp(&desc.type, SL_IID_VOLUME, sizeof(effect_uuid_t)) == 0) ||
+         (memcmp(&desc.type, SL_IID_DAP_SW, sizeof(effect_uuid_t)) == 0) ||
          (memcmp(&desc.type, SL_IID_DAP, sizeof(effect_uuid_t)) == 0) ||
          (memcmp(&desc.type, SL_V4A_RE, sizeof(effect_uuid_t)) == 0) ||
          (memcmp(&desc.type, SL_IID_DYNAMICSPROCESSING, sizeof(effect_uuid_t)) == 0))) {
