@@ -1339,7 +1339,7 @@ status_t Camera3Device::setStreamTransform(int id,
         CLOGE("Stream %d does not exist", id);
         return BAD_VALUE;
     }
-    return stream->setTransform(transform, false /*mayChangeMirror*/);
+    return stream->setTransform(transform);
 }
 
 status_t Camera3Device::deleteStream(int id) {
@@ -2909,7 +2909,8 @@ status_t Camera3Device::registerInFlight(uint32_t frameNumber,
         bool isFixedFps, const std::set<std::set<std::string>>& physicalCameraIds,
         bool isStillCapture, bool isZslCapture, bool rotateAndCropAuto, bool autoframingAuto,
         const std::set<std::string>& cameraIdsWithZoom, bool useZoomRatio,
-        const SurfaceMap& outputSurfaces, nsecs_t requestTimeNs) {
+        const SurfaceMap& outputSurfaces, nsecs_t requestTimeNs,
+        const TransformationMap &transform) {
     ATRACE_CALL();
     std::lock_guard<std::mutex> l(mInFlightLock);
 
@@ -2917,7 +2918,7 @@ status_t Camera3Device::registerInFlight(uint32_t frameNumber,
     res = mInFlightMap.add(frameNumber, InFlightRequest(numBuffers, resultExtras, hasInput,
             hasAppCallback, minExpectedDuration, maxExpectedDuration, isFixedFps, physicalCameraIds,
             isStillCapture, isZslCapture, rotateAndCropAuto, autoframingAuto, cameraIdsWithZoom,
-            requestTimeNs, useZoomRatio, outputSurfaces));
+            requestTimeNs, useZoomRatio, outputSurfaces, transform));
     if (res < 0) return res;
 
     if (mInFlightMap.size() == 1) {
@@ -4115,6 +4116,7 @@ status_t Camera3Device::RequestThread::prepareHalRequests() {
         nsecs_t waitDuration = kBaseGetBufferWait + parent->getExpectedInFlightDuration();
 
         SurfaceMap uniqueSurfaceIdMap;
+        TransformationMap transformMap;
         bool containsHalBufferManagedStream = false;
         for (size_t j = 0; j < captureRequest->mOutputStreams.size(); j++) {
             sp<Camera3OutputStreamInterface> outputStream =
@@ -4140,6 +4142,8 @@ status_t Camera3Device::RequestThread::prepareHalRequests() {
                     outputStream->cancelPrepare();
                 }
             }
+
+            transformMap.insert({streamId, {outputStream->getMirrorMode(), -1}});
 
             std::vector<size_t> uniqueSurfaceIds;
             res = outputStream->getUniqueSurfaceIds(
@@ -4269,7 +4273,7 @@ status_t Camera3Device::RequestThread::prepareHalRequests() {
                 captureRequest->mRotateAndCropAuto, captureRequest->mAutoframingAuto,
                 mPrevCameraIdsWithZoom, useZoomRatio,
                 passSurfaceMap ? uniqueSurfaceIdMap :
-                                      SurfaceMap{}, captureRequest->mRequestTimeNs);
+                                      SurfaceMap{}, captureRequest->mRequestTimeNs, transformMap);
         ALOGVV("%s: registered in flight requestId = %" PRId32 ", frameNumber = %" PRId64
                ", burstId = %" PRId32 ".",
                 __FUNCTION__,
@@ -5928,7 +5932,7 @@ status_t Camera3Device::deriveAndSetTransformLocked(
     if (res != OK) {
         return res;
     }
-    stream.setTransform(transform, false /*mayChangeMirror*/, surfaceId);
+    stream.setTransform(transform, surfaceId);
     return OK;
 }
 
