@@ -10634,7 +10634,7 @@ status_t MmapThread::start(const AudioClient& client,
             }
         }
     }
-
+    mTracks.add(track);
     mActiveTracks.add(track);
     sp<IAfEffectChain> chain = getEffectChain_l(mSessionId);
     if (chain != 0) {
@@ -10685,6 +10685,7 @@ status_t MmapThread::stop(audio_port_handle_t handle)
     }
 
     mActiveTracks.remove(track);
+    mTracks.remove(track);
     eraseClientSilencedState_l(track->portId());
     track->stop();
 
