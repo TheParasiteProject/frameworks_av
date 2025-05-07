@@ -25,6 +25,7 @@
 
 #include <aaudio/AAudio.h>
 #include <aaudio/AAudioTesting.h>
+#include <com_android_media_aaudio.h>
 #include <system/aaudio/AAudio.h>
 #include <system/audio.h>
 #include "AudioClock.h"
@@ -248,6 +249,20 @@ AAUDIO_API void AAudioStreamBuilder_setDataCallback(AAudioStreamBuilder* builder
     AudioStreamBuilder *streamBuilder = convertAAudioBuilderToStreamBuilder(builder);
     streamBuilder->setDataCallbackProc(callback);
     streamBuilder->setDataCallbackUserData(userData);
+}
+
+AAUDIO_API aaudio_result_t AAudioStreamBuilder_setPartialDataCallback(
+        AAudioStreamBuilder* builder,
+        AAudioStream_partialDataCallback callback,
+        void *userData)
+{
+    if (!com::android::media::aaudio::new_data_callback()) {
+        return AAUDIO_ERROR_UNIMPLEMENTED;
+    }
+    AudioStreamBuilder *streamBuilder = convertAAudioBuilderToStreamBuilder(builder);
+    streamBuilder->setPartialDataCallbackProc(callback)
+                 ->setDataCallbackUserData(userData);
+    return AAUDIO_OK;
 }
 
 AAUDIO_API void AAudioStreamBuilder_setErrorCallback(AAudioStreamBuilder* builder,
