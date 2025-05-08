@@ -25,6 +25,7 @@ cc_defaults {
         "libcodec2_soft_mpeg2dec",
         "libcodec2_soft_h263dec",
         "libcodec2_soft_h263enc",
+        "libcodec2_soft_iamfdec",
         "libcodec2_soft_mpeg4dec",
         "libcodec2_soft_mpeg4enc",
         "libcodec2_soft_mp3dec",
