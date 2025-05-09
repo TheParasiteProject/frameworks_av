@@ -6714,9 +6714,13 @@ void MixerThread::onRecommendedLatencyModeChanged(
     }
 }
 
+bool MixerThread::supportsBluetoothVariableLatency() const {
+    return mOutput != nullptr && mOutput->audioHwDev != nullptr
+            && mOutput->audioHwDev->supportsBluetoothVariableLatency();
+}
+
 status_t MixerThread::setBluetoothVariableLatencyEnabled(bool enabled) {
-    if (mOutput == nullptr || mOutput->audioHwDev == nullptr
-            || !mOutput->audioHwDev->supportsBluetoothVariableLatency()) {
+    if (!supportsBluetoothVariableLatency()) {
         return INVALID_OPERATION;
     }
     mBluetoothLatencyModesEnabled.store(enabled);
