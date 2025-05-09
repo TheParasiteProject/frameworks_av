@@ -554,7 +554,8 @@ void Component::OnBinderUnlinked(void *cookie) {
 }
 
 Component::~Component() {
-    InputBufferManager::unregisterFrameData(mListener);
+    this->reset();
+    this->release();
     mStore->reportComponentDeath(this);
     if (mDeathRecipient.get()) {
         AIBinder_unlinkToDeath(mListener->asBinder().get(), mDeathRecipient.get(), mDeathContext);
