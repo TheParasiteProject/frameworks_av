@@ -435,7 +435,7 @@ status_t Camera3OutputStream::returnBufferCheckedLocked(
             nsecs_t presentTime = mSyncToDisplay ?
                     syncTimestampToDisplayLocked(captureTime, releaseFence) : captureTime;
 
-            setTransform(transform, true/*mayChangeMirror*/);
+            setTransform(transform);
             res = native_window_set_buffers_timestamp(mConsumer.get(), presentTime);
             if (res != OK) {
                 ALOGE("%s: Stream %d: Error setting timestamp: %s (%d)",
@@ -482,15 +482,9 @@ void Camera3OutputStream::dump(int fd, [[maybe_unused]] const Vector<String16> &
         "      DequeueBuffer latency histogram:");
 }
 
-status_t Camera3OutputStream::setTransform(int transform, bool mayChangeMirror, int surfaceId) {
+status_t Camera3OutputStream::setTransform(int transform, int surfaceId) {
     ATRACE_CALL();
     Mutex::Autolock l(mLock);
-
-    if (mMirrorMode != OutputConfiguration::MIRROR_MODE_AUTO && mayChangeMirror) {
-        // If the mirroring mode is not AUTO, do not allow transform update
-        // which may change mirror.
-        return OK;
-    }
 
     status_t res = OK;
 

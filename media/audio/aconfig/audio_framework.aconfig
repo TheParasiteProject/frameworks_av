@@ -49,6 +49,14 @@ flag {
 }
 
 flag {
+    name: "device_volume_apis"
+    namespace: "media_audio"
+    description: "Add APIs to set/adjust volume for a specific device."
+    is_exported: true
+    bug: "404313846"
+}
+
+flag {
     name: "enable_multichannel_group_device"
     namespace: "media_audio"
     description:
@@ -150,6 +158,13 @@ flag {
     namespace: "media_audio"
     description: "API definitions for the IAMF format"
     bug: "337522902"
+}
+
+flag {
+    name: "leaudio_sw_offload"
+    namespace: "media_audio"
+    description: "Changes related to LEA SW offload"
+    bug: "372969373"
 }
 
 flag {
