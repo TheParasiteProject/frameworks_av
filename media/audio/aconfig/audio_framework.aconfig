@@ -11,6 +11,7 @@ flag {
     name: "assistant_volume_control"
     namespace: "media_audio"
     description: "Implement the logic for having STREAM_ASSISTANT lead the volume control"
+    is_exported: true
     bug: "416329698"
 }
 
