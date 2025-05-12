@@ -312,7 +312,7 @@ private:
         uint64_t key = reinterpret_cast<uint64_t>(context);
         std::lock_guard<std::mutex> l(mutex);
         auto it = listeners.find(key);
-        if (it->first) {
+        if (it != listeners.end()) {
             source = it->second.promote();
             if (!source) {
                 listeners.erase(it);
