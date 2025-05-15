@@ -162,7 +162,6 @@ public:
     virtual DeviceVector devices() const { return mDevices; }
     bool sharesHwModuleWith(const sp<AudioOutputDescriptor>& outputDesc);
     virtual DeviceVector supportedDevices() const  { return mDevices; }
-    virtual DeviceVector routableDevices() const  { return mDevices; }
     virtual bool isDuplicated() const { return false; }
     virtual uint32_t latency() { return 0; }
     virtual bool isFixedVolume(const DeviceTypeSet& deviceTypes);
@@ -385,7 +384,6 @@ public:
     void setDevices(const DeviceVector &devices);
     bool sharesHwModuleWith(const sp<SwAudioOutputDescriptor>& outputDesc);
     virtual DeviceVector supportedDevices() const;
-    virtual DeviceVector routableDevices() const;
     virtual bool devicesSupportEncodedFormats(const DeviceTypeSet& deviceTypes);
     virtual bool containsSingleDeviceSupportingEncodedFormats(
             const sp<DeviceDescriptor>& device) const;
@@ -456,14 +454,6 @@ public:
     bool supportsDevice(const sp<DeviceDescriptor> &device) const;
 
     /**
-     * @brief routesToDevice
-     * @param device to be checked against
-     * @return true if the device is routable from/to this profile.
-     *         false otherwise
-     */
-    bool routesToDevice(const sp<DeviceDescriptor> &device) const;
-
-    /**
      * @brief supportsAllDevices
      * @param devices to be checked against
      * @return true if the device is weakly supported by type (e.g. for non bus / rsubmix devices),
@@ -471,14 +461,6 @@ public:
      *         false otherwise
      */
     bool supportsAllDevices(const DeviceVector &devices) const;
-
-    /**
-     * @brief routesToAllDevices
-     * @param devices to be checked against
-     * @return true if all devices are routable to this profile
-     *         false otherwise
-     */
-    bool routesToAllDevices(const DeviceVector &devices) const;
 
     /**
      * @brief supportsAtLeastOne checks if any device in devices is currently supported
@@ -490,28 +472,12 @@ public:
     bool supportsAtLeastOne(const DeviceVector &devices) const;
 
     /**
-     * @brief routesToAtLeastOne checks if any device in devices is currently routable
-     * @param devices to be checked against
-     * @return true if any device is routable to this profile
-     *         false otherwise
-     */
-    bool routesToAtLeastOne(const DeviceVector &devices) const;
-
-    /**
      * @brief supportsDevicesForPlayback
      * @param devices to be checked against
      * @return true if the devices is a supported combo for playback
      *         false otherwise
      */
     bool supportsDevicesForPlayback(const DeviceVector &devices) const;
-
-    /**
-     * @brief routesToDevicesForPlayback
-     * @param devices to be checked against
-     * @return true if the devices is a routable combo for playback
-     *         false otherwise
-     */
-    bool routesToDevicesForPlayback(const DeviceVector &devices) const;
 
     /**
      * @brief filterSupportedDevices takes a vector of devices and filters them according to the
@@ -521,14 +487,6 @@ public:
      * depending on the device type)
      */
     DeviceVector filterSupportedDevices(const DeviceVector &devices) const;
-
-    /**
-     * @brief filterRoutableDevices takes a vector of devices and filters them according to the
-     * device routable to this output (the profile from which this output derives from)
-     * @param devices reference device vector to be filtered
-     * @return vector of devices filtered from the routable devices of this output
-     */
-    DeviceVector filterRoutableDevices(const DeviceVector &devices) const;
 
     uint32_t getRecommendedMuteDurationMs() const override;
 
