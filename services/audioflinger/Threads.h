@@ -947,6 +947,18 @@ protected:
 
     std::vector<sp<IAfTrackBase>> getTracks_l() final REQUIRES(mutex());
 
+    std::set<audio_port_handle_t> getTrackPortIds_l() const REQUIRES(mutex());
+    std::set<audio_port_handle_t> getTrackPortIds() const EXCLUDES_ThreadBase_Mutex;
+
+    // Invalidate tracks by a set of port ids. The port id will be removed from
+    // the given set if the corresponding track is found and invalidated.
+    //
+    // If portIds == nullptr, all tracks, including internal tracks are invalidated.
+    bool invalidateTracks_l(std::set<audio_port_handle_t>* portIds = {}) override
+            REQUIRES(mutex());
+    bool invalidateTracks(std::set<audio_port_handle_t>* portIds = {}) override
+            EXCLUDES_ThreadBase_Mutex;
+
     status_t setPortsVolume(const std::vector<audio_port_handle_t>& portIds, float volume,
                             bool muted) final EXCLUDES_ThreadBase_Mutex;
 
@@ -1172,17 +1184,6 @@ public:
     // could be static.
     bool isValidSyncEvent(const sp<audioflinger::SyncEvent>& event) const final;
 
-    // Does this require the AudioFlinger mutex as well?
-    bool invalidateTracks_l(audio_stream_type_t streamType) final
-            REQUIRES(mutex());
-    bool invalidateTracks_l(std::set<audio_port_handle_t>& portIds) final
-            REQUIRES(mutex());
-    void invalidateTracks(audio_stream_type_t streamType) override;
-                // Invalidate tracks by a set of port ids. The port id will be removed from
-                // the given set if the corresponding track is found and invalidated.
-    void invalidateTracks(std::set<audio_port_handle_t>& portIds) override
-            EXCLUDES_ThreadBase_Mutex;
-
     size_t frameCount() const final { return mNormalFrameCount; }
 
     audio_channel_mask_t mixerChannelMask() const final {
@@ -1248,6 +1249,8 @@ public:
             std::vector<audio_latency_mode_t>* /* modes */) override {
                     return INVALID_OPERATION;
                 }
+
+    bool supportsBluetoothVariableLatency() const override { return false; }
 
     status_t setBluetoothVariableLatencyEnabled(bool /* enabled */) override{
                     return INVALID_OPERATION;
@@ -1466,8 +1469,6 @@ protected:
     bool destroyTrack_l(const sp<IAfTrack>& track) final REQUIRES(mutex());
 
     void removeTrack_l(const sp<IAfTrack>& track) REQUIRES(mutex());
-    std::set<audio_port_handle_t> getTrackPortIds_l() REQUIRES(mutex());
-    std::set<audio_port_handle_t> getTrackPortIds();
 
     void readOutputParameters_l() REQUIRES(mutex());
     MetadataUpdate updateMetadata_l() final REQUIRES(mutex(), ThreadBase_ThreadLoop);
@@ -1722,6 +1723,8 @@ public:
                 status_t    getSupportedLatencyModes(
                                     std::vector<audio_latency_mode_t>* modes) override;
 
+                bool supportsBluetoothVariableLatency() const override;
+
                 status_t    setBluetoothVariableLatencyEnabled(bool enabled) override;
 
 protected:
@@ -1851,8 +1854,7 @@ protected:
 
     bool waitingAsyncCallback() final;
     bool waitingAsyncCallback_l() final REQUIRES(mutex());
-    void invalidateTracks(audio_stream_type_t streamType) final EXCLUDES_ThreadBase_Mutex;
-    void invalidateTracks(std::set<audio_port_handle_t>& portIds) final EXCLUDES_ThreadBase_Mutex;
+    bool invalidateTracks_l(std::set<audio_port_handle_t>* portIds) final REQUIRES(mutex());
 
     bool keepWakeLock() const final { return (mKeepWakeLock || (mDrainSequence & 1)); }
 
@@ -2237,6 +2239,7 @@ private:
             std::string                         mSharedAudioPackageName = {};
             int32_t                             mSharedAudioStartFrames = -1;
             audio_session_t                     mSharedAudioSessionId = AUDIO_SESSION_NONE;
+            std::atomic_bool                    mIsHwSilenced = false;
 };
 
 class DirectRecordThread final : public RecordThread {
@@ -2338,10 +2341,6 @@ class MmapThread : public ThreadBase, public virtual IAfMmapThread
     virtual audio_stream_type_t streamType_l() const REQUIRES(mutex()) {
         return AUDIO_STREAM_DEFAULT;
     }
-    virtual void invalidateTracks(audio_stream_type_t /* streamType */)
-            EXCLUDES_ThreadBase_Mutex {}
-    void invalidateTracks(std::set<audio_port_handle_t>& /* portIds */) override
-            EXCLUDES_ThreadBase_Mutex {}
 
                 // Sets the UID records silence
     void setRecordSilenced(
@@ -2435,9 +2434,6 @@ public:
     float streamVolume(audio_stream_type_t stream) const final EXCLUDES_ThreadBase_Mutex;
 
     void setMasterMute_l(bool muted) REQUIRES(mutex()) { mMasterMute = muted; }
-
-    void invalidateTracks(audio_stream_type_t streamType) final EXCLUDES_ThreadBase_Mutex;
-    void invalidateTracks(std::set<audio_port_handle_t>& portIds) final EXCLUDES_ThreadBase_Mutex;
 
     audio_stream_type_t streamType_l() const final REQUIRES(mutex()) {
         return mStreamType;
