@@ -69,6 +69,7 @@
 #include <system/audio.h>
 
 #include <media/stagefright/rtsp/ARTPWriter.h>
+#include <android_media_mediarecorder.h>
 #include <com_android_media_editing_flags.h>
 
 namespace android {
@@ -2029,6 +2030,14 @@ status_t StagefrightRecorder::setupVideoEncoder(
 
         case VIDEO_ENCODER_AV1:
             format->setString("mime", MEDIA_MIMETYPE_VIDEO_AV1);
+            break;
+
+        case VIDEO_ENCODER_APV:
+            if (android::media::mediarecorder::apv_recording_support()) {
+                format->setString("mime", MEDIA_MIMETYPE_VIDEO_APV);
+            } else {
+                CHECK(!"Should not be here, unsupported video encoding.");
+            }
             break;
 
         default:
