@@ -5434,10 +5434,10 @@ void PlaybackThread::onAddNewTrack_l()
 
 void PlaybackThread::onAsyncError(bool isHardError)
 {
-    auto allTrackPortIds = getTrackPortIds();
-    invalidateTracks();
-    if (isHardError) {
-        mAfThreadCallback->onHardError(allTrackPortIds);
+    if (!isHardError || !isOffloadOrDirect()) {
+        invalidateTracks();
+    } else {
+        mAfThreadCallback->onHardError(id());
     }
 }
 

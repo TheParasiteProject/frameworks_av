@@ -3804,6 +3804,31 @@ TEST_F(AudioPolicyManagerPhoneTest, NoPatchChangesDuringAlarmPlayback) {
             "Unexpected change in patches detected";
 }
 
+TEST_F(AudioPolicyManagerPhoneTest, ForceReleaseDirectOutput) {
+    DeviceIdVector selectedDeviceIds;
+    audio_io_handle_t output;
+    audio_port_handle_t portId;
+    ASSERT_NO_FATAL_FAILURE(getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_FLOAT,
+                                             AUDIO_CHANNEL_OUT_STEREO, k48000SamplingRate,
+                                             AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId));
+    EXPECT_NE(nullptr, mManager->getOutputs().valueFor(output));
+    ASSERT_EQ(OK, mManager->forceReleaseDirectOutput(output));
+    EXPECT_EQ(nullptr, mManager->getOutputs().valueFor(output));
+}
+
+TEST_F(AudioPolicyManagerPhoneTest, ForceReleaseDirectOutputForNonDirect) {
+    DeviceIdVector selectedDeviceIds;
+    audio_io_handle_t output;
+    audio_port_handle_t portId;
+    // This should select the default (non-direct) output.
+    ASSERT_NO_FATAL_FAILURE(getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT,
+                                             AUDIO_CHANNEL_OUT_STEREO, k48000SamplingRate,
+                                             AUDIO_OUTPUT_FLAG_NONE, &output, &portId));
+    EXPECT_NE(nullptr, mManager->getOutputs().valueFor(output));
+    EXPECT_EQ(BAD_VALUE, mManager->forceReleaseDirectOutput(output));
+    EXPECT_NE(nullptr, mManager->getOutputs().valueFor(output));
+}
+
 enum {
     MIX_PORT_ATTR_EXPECTED_NAME_PARAMETER,
     MIX_PORT_ATTR_EXPECTED_NAME_WITH_DBFM_PARAMETER,

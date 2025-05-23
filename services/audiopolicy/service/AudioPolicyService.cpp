@@ -84,6 +84,7 @@ BINDER_METHOD_ENTRY(getOutputForAttr) \
 BINDER_METHOD_ENTRY(startOutput) \
 BINDER_METHOD_ENTRY(stopOutput) \
 BINDER_METHOD_ENTRY(releaseOutput) \
+BINDER_METHOD_ENTRY(forceReleaseDirectOutput) \
 BINDER_METHOD_ENTRY(getInputForAttr) \
 BINDER_METHOD_ENTRY(startInput) \
 BINDER_METHOD_ENTRY(stopInput) \
@@ -1351,6 +1352,7 @@ status_t AudioPolicyService::onTransact(
         case TRANSACTION_startOutput:
         case TRANSACTION_stopOutput:
         case TRANSACTION_releaseOutput:
+        case TRANSACTION_forceReleaseDirectOutput:
         case TRANSACTION_getInputForAttr:
         case TRANSACTION_startInput:
         case TRANSACTION_stopInput:
@@ -1907,6 +1909,19 @@ bool AudioPolicyService::AudioCommandThread::threadLoop()
                     svc->doReleaseOutput(data->mPortId);
                     ul.lock();
                     }break;
+                case FORCE_RELEASE_DIRECT_OUTPUT: {
+                    ForceReleaseDirectOutputData *data =
+                            (ForceReleaseDirectOutputData*)command->mParam.get();
+                    ALOGV("AudioCommandThread() processing force release direct output outputId %d",
+                            data->mOutputId);
+                    svc = mService.promote();
+                    if (svc == 0) {
+                        break;
+                    }
+                    ul.unlock();
+                    command->mStatus = svc->doForceReleaseDirectOutput(data->mOutputId);
+                    ul.lock();
+                    }break;
                 case CREATE_AUDIO_PATCH: {
                     CreateAudioPatchData *data = (CreateAudioPatchData *)command->mParam.get();
                     ALOGV("AudioCommandThread() processing create audio patch");
@@ -2265,6 +2280,19 @@ void AudioPolicyService::AudioCommandThread::releaseOutputCommand(audio_port_han
     command->mParam = data;
     ALOGV("AudioCommandThread() adding release output portId %d", portId);
     sendCommand(command);
+}
+
+status_t AudioPolicyService::AudioCommandThread::forceReleaseDirectOutputCommand(
+        audio_io_handle_t outputId)
+{
+    sp<AudioCommand> command = new AudioCommand();
+    command->mCommand = FORCE_RELEASE_DIRECT_OUTPUT;
+    sp<ForceReleaseDirectOutputData> data = new ForceReleaseDirectOutputData();
+    data->mOutputId = outputId;
+    command->mParam = data;
+    command->mWaitStatus = true;
+    ALOGV("AudioCommandThread() adding force release direct output outputId %d", outputId);
+    return sendCommand(command);
 }
 
 status_t AudioPolicyService::AudioCommandThread::createAudioPatchCommand(
