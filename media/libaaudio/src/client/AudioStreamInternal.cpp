@@ -515,11 +515,7 @@ aaudio_result_t AudioStreamInternal::requestStart_l()
     // Start data callback thread.
     if (result == AAUDIO_OK && isDataCallbackSet()) {
         // Launch the callback loop thread.
-        int64_t periodNanos = mCallbackFrames
-                              * AAUDIO_NANOS_PER_SECOND
-                              / getSampleRate();
-        mCallbackEnabled.store(true);
-        result = createThread_l(periodNanos, aaudio_callback_thread_proc, this);
+        result = startCallback_l();
     }
     if (result != AAUDIO_OK) {
         setState(originalState);
@@ -561,6 +557,12 @@ aaudio_result_t AudioStreamInternal::stopCallback_l()
             isDataCallbackSet(), isActive(), getState());
         return AAUDIO_OK;
     }
+}
+
+aaudio_result_t AudioStreamInternal::startCallback_l() {
+    int64_t periodNanos = mCallbackFrames * AAUDIO_NANOS_PER_SECOND / getSampleRate();
+    mCallbackEnabled.store(true);
+    return createThread_l(periodNanos, aaudio_callback_thread_proc, this);
 }
 
 aaudio_result_t AudioStreamInternal::requestStop_l() {
