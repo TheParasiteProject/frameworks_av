@@ -118,13 +118,6 @@ flag {
 }
 
 flag {
-    name: "music_fx_edge_to_edge"
-    namespace: "media_audio"
-    description: "Enable Edge-to-edge feature for MusicFx and handle insets"
-    bug: "336204940"
-}
-
-flag {
     name: "optimize_bt_device_switch"
     namespace: "media_audio"
     description: "Optimize the Bluetooth active device switch sequence"
