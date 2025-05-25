@@ -54,7 +54,8 @@ public:
     IAfThreadCallback* afThreadCallback() const final { return mAfThreadCallback.get(); }
 
     ThreadBase(const sp<IAfThreadCallback>& afThreadCallback, audio_io_handle_t id,
-               type_t type, bool systemReady, bool isOut);
+            type_t type, bool systemReady, bool isOut,
+            AudioStreamIn* input, AudioStreamOut* output);
     ~ThreadBase() override;
 
     status_t readyToRun() final;
@@ -972,9 +973,47 @@ protected:
     // for access.
     audio_utils::DeferredExecutor mThreadloopExecutor;
 
+    AudioStreamOut* getOutput_l() const final REQUIRES(mutex()) {
+        return mOutput;
+    }
+    AudioStreamOut* getOutput() const final EXCLUDES_ThreadBase_Mutex {
+        audio_utils::lock_guard _l(mutex());
+        return getOutput_l();
+    }
+    AudioStreamOut* clearOutput_l() override REQUIRES(mutex()) {
+        AudioStreamOut* output = mOutput;
+        mOutput = nullptr;
+        return output;
+    }
+    AudioStreamOut* clearOutput() final EXCLUDES_ThreadBase_Mutex {
+        audio_utils::lock_guard _l(mutex());
+        return clearOutput_l();
+    }
+
+    AudioStreamIn* getInput_l() const final REQUIRES(mutex()) {
+        return mInput;
+    }
+    AudioStreamIn* getInput() const final EXCLUDES_ThreadBase_Mutex {
+        audio_utils::lock_guard _l(mutex());
+        return getInput_l();
+    }
+    AudioStreamIn* clearInput_l() override REQUIRES(mutex()) {
+        AudioStreamIn* input = mInput;
+        mInput = nullptr;
+        return input;
+    }
+    AudioStreamIn* clearInput() final EXCLUDES_ThreadBase_Mutex {
+        audio_utils::lock_guard _l(mutex());
+        return clearInput_l();
+    }
+
     private:
     void dumpBase_l(int fd, const Vector<String16>& args) REQUIRES(mutex());
     void dumpEffectChains_l(int fd, const Vector<String16>& args) REQUIRES(mutex());
+
+protected:
+    AudioStreamIn* mInput = nullptr; // NO_THREAD_SAFETY_ANALYSIS
+    AudioStreamOut* mOutput = nullptr; // NO_THREAD_SAFETY_ANALYSIS
 };
 
 // --- PlaybackThread ---
@@ -1128,9 +1167,7 @@ public:
         return mActiveTracks.count(track) > 0;
     }
 
-    AudioStreamOut* getOutput_l() const final REQUIRES(mutex()) { return mOutput; }
-    AudioStreamOut* getOutput() const final EXCLUDES_ThreadBase_Mutex;
-    AudioStreamOut* clearOutput() final EXCLUDES_ThreadBase_Mutex;
+    AudioStreamOut* clearOutput_l() final REQUIRES(mutex());
 
     // NO_THREAD_SAFETY_ANALYSIS -- probably needs a lock.
     sp<StreamHalInterface> stream() const final;
@@ -1478,8 +1515,6 @@ protected:
     void collectTimestamps_l() REQUIRES(mutex(), ThreadBase_ThreadLoop);
 
     stream_type_t                   mStreamTypes[AUDIO_STREAM_CNT];
-
-    AudioStreamOut                  *mOutput;
 
     float                           mMasterVolume;
     std::atomic<float>              mMasterBalance{};
@@ -2053,8 +2088,7 @@ public:
             // ask the thread to stop the specified track, and
             // return true if the caller should then do it's part of the stopping process
     bool stop(IAfRecordTrack* recordTrack) final EXCLUDES_ThreadBase_Mutex;
-    AudioStreamIn* getInput() const final { return mInput; }
-    AudioStreamIn* clearInput() final;
+    AudioStreamIn* clearInput_l() final REQUIRES(mutex());
 
             // TODO(b/291317898) Unify with IAfThreadBase
             virtual sp<StreamHalInterface> stream() const;
@@ -2166,8 +2200,6 @@ private:
 
     int32_t getOldestFront_l() REQUIRES(mutex());
     void updateFronts_l(int32_t offset) REQUIRES(mutex());
-
-            AudioStreamIn                       *mInput;
             Source                              *mSource;
             // mActiveTracks has dual roles:  it indicates the current active track(s), and
             // is used together with mStartStopCV to indicate start()/stop() progress
@@ -2254,7 +2286,7 @@ class MmapThread : public ThreadBase, public virtual IAfMmapThread
  public:
     MmapThread(const sp<IAfThreadCallback>& afThreadCallback, audio_io_handle_t id,
                AudioHwDevice *hwDev, const sp<StreamHalInterface>& stream, bool systemReady,
-               bool isOut);
+               bool isOut, AudioStreamIn* input, AudioStreamOut* output);
 
     void configure(const audio_attributes_t* attr,
                    audio_stream_type_t streamType,
@@ -2301,7 +2333,7 @@ class MmapThread : public ThreadBase, public virtual IAfMmapThread
     virtual void threadLoop_exit() final REQUIRES(ThreadBase_ThreadLoop);
     virtual void threadLoop_standby() final REQUIRES(ThreadBase_ThreadLoop);
     virtual bool shouldStandby_l() final REQUIRES(mutex()){ return false; }
-    virtual status_t exitStandby_l() REQUIRES(mutex());
+    virtual status_t exitStandby_l() final REQUIRES(mutex());
 
     status_t initCheck() const final { return mHalStream == nullptr ? NO_INIT : NO_ERROR; }
     size_t frameCount() const final { return mFrameCount; }
@@ -2420,8 +2452,6 @@ public:
                    audio_port_handle_t portId,
                    const audio_offload_info_t* offloadInfo) final EXCLUDES_ThreadBase_Mutex;
 
-    AudioStreamOut* clearOutput() final EXCLUDES_ThreadBase_Mutex;
-
                 // VolumeInterface
     void setMasterVolume(float value) final;
     // Needs implementation?
@@ -2476,8 +2506,6 @@ protected:
     float mMasterVolume GUARDED_BY(mutex());
     bool mMasterMute GUARDED_BY(mutex());
     std::optional<audio_offload_info_t> mOffloadInfo GUARDED_BY(mutex());
-    AudioStreamOut* mOutput;  // NO_THREAD_SAFETY_ANALYSIS
-
     mediautils::atomic_sp<audio_utils::MelProcessor> mMelProcessor;  // locked internally
 };
 
@@ -2491,10 +2519,6 @@ public:
         return sp<IAfMmapCaptureThread>::fromExisting(this);
     }
 
-    AudioStreamIn* clearInput() final EXCLUDES_ThreadBase_Mutex;
-
-    status_t exitStandby_l() REQUIRES(mutex()) final;
-
     MetadataUpdate updateMetadata_l() final REQUIRES(mutex());
     void processVolume_l() final REQUIRES(mutex());
     void setRecordSilenced(audio_port_handle_t portId, bool silenced) final
@@ -2507,10 +2531,6 @@ public:
     bool isStreamInitialized() const final {
                                    return !(mInput == nullptr || mInput->stream == nullptr);
                                }
-
-protected:
-
-    AudioStreamIn* mInput;  // NO_THREAD_SAFETY_ANALYSIS
 };
 
 class BitPerfectThread : public MixerThread {

@@ -643,7 +643,7 @@ const char* IAfThreadBase::threadTypeToString(ThreadBase::type_t type)
 }
 
 ThreadBase::ThreadBase(const sp<IAfThreadCallback>& afThreadCallback, audio_io_handle_t id,
-        type_t type, bool systemReady, bool isOut)
+        type_t type, bool systemReady, bool isOut, AudioStreamIn* input, AudioStreamOut* output)
     :   Thread(false /*canCallJava*/),
         mType(type),
         mAfThreadCallback(afThreadCallback),
@@ -659,7 +659,9 @@ ThreadBase::ThreadBase(const sp<IAfThreadCallback>& afThreadCallback, audio_io_h
         // mName will be set by concrete (non-virtual) subclass
         mDeathRecipient(new PMDeathRecipient(this)),
         mSystemReady(systemReady),
-        mSignalPending(false)
+        mSignalPending(false),
+        mInput(input),
+        mOutput(output)
 {
     mThreadMetrics.logConstructor(getpid(), threadTypeToString(type), id);
     memset(&mPatch, 0, sizeof(struct audio_patch));
@@ -2244,7 +2246,8 @@ PlaybackThread::PlaybackThread(const sp<IAfThreadCallback>& afThreadCallback,
                                              type_t type,
                                              bool systemReady,
                                              audio_config_base_t *mixerConfig)
-    :   ThreadBase(afThreadCallback, id, type, systemReady, true /* isOut */),
+    :   ThreadBase(afThreadCallback, id, type, systemReady, true /* isOut */,
+            nullptr /* input */, output),
         mNormalFrameCount(0), mSinkBuffer(NULL),
         mMixerBufferEnabled(kEnableExtendedPrecision || type == SPATIALIZER),
         mMixerBuffer(NULL),
@@ -2260,7 +2263,6 @@ PlaybackThread::PlaybackThread(const sp<IAfThreadCallback>& afThreadCallback,
         mFramesWritten(0),
         mSuspendedFrames(0),
         // mStreamTypes[] initialized in constructor body
-        mOutput(output),
         mNumWrites(0), mNumDelayedWrites(0), mInWrite(false),
         mMixerStatus(MIXER_IDLE),
         mMixerStatusIgnoringFastTracks(MIXER_IDLE),
@@ -3522,18 +3524,9 @@ product_strategy_t PlaybackThread::getStrategyForSession_l(audio_session_t sessi
     return getStrategyForStream(AUDIO_STREAM_MUSIC);
 }
 
-
-AudioStreamOut* PlaybackThread::getOutput() const
+AudioStreamOut* PlaybackThread::clearOutput_l()
 {
-    audio_utils::lock_guard _l(mutex());
-    return mOutput;
-}
-
-AudioStreamOut* PlaybackThread::clearOutput()
-{
-    audio_utils::lock_guard _l(mutex());
-    AudioStreamOut *output = mOutput;
-    mOutput = NULL;
+    AudioStreamOut* output = ThreadBase::clearOutput_l();
     // FIXME FastMixer might also have a raw ptr to mOutputSink;
     //       must push a NULL and wait for ack
     mOutputSink.clear();
@@ -8207,8 +8200,8 @@ RecordThread::RecordThread(const sp<IAfThreadCallback>& afThreadCallback,
                                          audio_io_handle_t id,
                                          bool systemReady
                                          ) :
-    ThreadBase(afThreadCallback, id, type, systemReady, false /* isOut */),
-    mInput(input),
+    ThreadBase(afThreadCallback, id, type, systemReady, false /* isOut */,
+        input, nullptr /* output */),
     mSource(mInput),
     mRsmpInBuffer(NULL),
     // mRsmpInFrames, mRsmpInFramesP2, and mRsmpInFramesOA are set by readInputParameters_l()
@@ -10006,11 +9999,9 @@ KeyedVector<audio_session_t, bool> RecordThread::sessionIds() const
     return ids;
 }
 
-AudioStreamIn* RecordThread::clearInput()
+AudioStreamIn* RecordThread::clearInput_l()
 {
-    audio_utils::lock_guard _l(mutex());
-    AudioStreamIn *input = mInput;
-    mInput = NULL;
+    AudioStreamIn* input = ThreadBase::clearInput_l();
     mInputSource.clear();
     return input;
 }
@@ -10389,8 +10380,10 @@ status_t MmapThreadHandle::reportData(const void* buffer, size_t frameCount)
 
 MmapThread::MmapThread(
         const sp<IAfThreadCallback>& afThreadCallback, audio_io_handle_t id,
-        AudioHwDevice *hwDev, const sp<StreamHalInterface>& stream, bool systemReady, bool isOut)
-    : ThreadBase(afThreadCallback, id, (isOut ? MMAP_PLAYBACK : MMAP_CAPTURE), systemReady, isOut),
+        AudioHwDevice *hwDev, const sp<StreamHalInterface>& stream, bool systemReady, bool isOut,
+        AudioStreamIn* input, AudioStreamOut* output)
+    : ThreadBase(afThreadCallback, id, (isOut ? MMAP_PLAYBACK : MMAP_CAPTURE), systemReady,
+              isOut, input, output),
       mSessionId(AUDIO_SESSION_NONE),
       mPortId(AUDIO_PORT_HANDLE_NONE),
       mHalStream(stream), mHalDevice(hwDev->hwDevice()), mAudioHwDev(hwDev),
@@ -10468,6 +10461,12 @@ status_t MmapThread::getMmapPosition(struct audio_mmap_position* position) const
 
 status_t MmapThread::exitStandby_l()
 {
+    if (mType == MMAP_CAPTURE) {
+        // mInput might have been cleared by clearInput()
+        if (mInput != nullptr && mInput->stream != nullptr) {
+            mInput->stream->setGain(1.0f);
+        }
+    }
     // The HAL must receive track metadata before starting the stream
     updateMetadata_l();
     status_t ret = mHalStream->start();
@@ -11242,9 +11241,9 @@ sp<IAfMmapPlaybackThread> IAfMmapPlaybackThread::create(
 MmapPlaybackThread::MmapPlaybackThread(
         const sp<IAfThreadCallback>& afThreadCallback, audio_io_handle_t id,
         AudioHwDevice *hwDev,  AudioStreamOut *output, bool systemReady)
-    : MmapThread(afThreadCallback, id, hwDev, output->stream, systemReady, true /* isOut */),
-      mStreamType(AUDIO_STREAM_MUSIC),
-      mOutput(output)
+    : MmapThread(afThreadCallback, id, hwDev, output->stream, systemReady, true /* isOut */,
+            nullptr /* input */, output),
+      mStreamType(AUDIO_STREAM_MUSIC)
 {
     snprintf(mThreadName, kThreadNameLength, "AudioMmapOut_%X", id);
     mFlagsAsString = toString(output->flags);
@@ -11290,14 +11289,6 @@ void MmapPlaybackThread::configure(const audio_attributes_t* attr,
     } else {
         mOffloadInfo = std::nullopt;
     }
-}
-
-AudioStreamOut* MmapPlaybackThread::clearOutput()
-{
-    audio_utils::lock_guard _l(mutex());
-    AudioStreamOut *output = mOutput;
-    mOutput = NULL;
-    return output;
 }
 
 void MmapPlaybackThread::setMasterVolume(float value)
@@ -11567,31 +11558,11 @@ sp<IAfMmapCaptureThread> IAfMmapCaptureThread::create(
 MmapCaptureThread::MmapCaptureThread(
         const sp<IAfThreadCallback>& afThreadCallback, audio_io_handle_t id,
         AudioHwDevice *hwDev,  AudioStreamIn *input, bool systemReady)
-    : MmapThread(afThreadCallback, id, hwDev, input->stream, systemReady, false /* isOut */),
-      mInput(input)
-{
+    : MmapThread(afThreadCallback, id, hwDev, input->stream, systemReady, false /* isOut */,
+            input, nullptr /* output */) {
     snprintf(mThreadName, kThreadNameLength, "AudioMmapIn_%X", id);
     mFlagsAsString = toString(input->flags);
     mChannelCount = audio_channel_count_from_in_mask(mChannelMask);
-}
-
-status_t MmapCaptureThread::exitStandby_l()
-{
-    {
-        // mInput might have been cleared by clearInput()
-        if (mInput != nullptr && mInput->stream != nullptr) {
-            mInput->stream->setGain(1.0f);
-        }
-    }
-    return MmapThread::exitStandby_l();
-}
-
-AudioStreamIn* MmapCaptureThread::clearInput()
-{
-    audio_utils::lock_guard _l(mutex());
-    AudioStreamIn *input = mInput;
-    mInput = NULL;
-    return input;
 }
 
 void MmapCaptureThread::processVolume_l()
