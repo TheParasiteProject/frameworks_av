@@ -17,6 +17,7 @@
 #include <map>
 #include <set>
 
+#include <com_android_media_audioserver.h>
 #include <media/TypeConverter.h>
 #include <system/audio.h>
 #include <utils/Log.h>
@@ -265,13 +266,26 @@ public:
     status_t getAudioMixPort(const struct audio_port_v7 *devicePort,
                              struct audio_port_v7 *mixPort,
                              int32_t mixPortHalId) override {
-        // Derive port ID from IO handle if specified.
-        audio_io_handle_t ioHandle = mixPort->ext.mix.handle;
-        if (mixPortHalId == AUDIO_PORT_HANDLE_NONE && ioHandle != AUDIO_IO_HANDLE_NONE) {
-            if (!mIoHandleToMixPortId.count(ioHandle)) {
-                return BAD_VALUE;
+        const audio_io_handle_t ioHandle = mixPort->ext.mix.handle;
+
+        // Preserve the same behavior as the corresponding pre-flag logic.
+        if (!com::android::media::audioserver::enable_strict_port_routing_checks()
+              && ioHandle == AUDIO_IO_HANDLE_NONE) {
+            // If ioHandle is not supplied, this is certainly from a caller added after
+            // the change this flag is introducing, and will anticipate routing checks.
+            // However, in such an event, if the flag is disabled, the real pre-flag implementation
+            // will end up in `BAD_VALUE`, and we want to align to that for now in this mocked
+            // implementation. The trade-off is that the aformentioned caller must do the flag
+            // check before calling into `getAudioMixPort`.
+            return BAD_VALUE;
+        } else {
+            // Derive port ID from IO handle if specified.
+            if (mixPortHalId == AUDIO_PORT_HANDLE_NONE && ioHandle != AUDIO_IO_HANDLE_NONE) {
+                if (!mIoHandleToMixPortId.count(ioHandle)) {
+                    return BAD_VALUE;
+                }
+                mixPortHalId = mIoHandleToMixPortId[ioHandle];
             }
-            mixPortHalId = mIoHandleToMixPortId[ioHandle];
         }
 
         // Check routing if port is identifiable by ID.
