@@ -1146,9 +1146,9 @@ protected:
 public:
 
                 // return estimated latency in milliseconds, as reported by HAL
-    uint32_t latency() const final;
+    uint32_t latency() const final EXCLUDES_ThreadBase_Mutex;
                 // same, but lock must already be held
-    uint32_t latency_l() const final /* REQUIRES(mutex()) */;  // NO_THREAD_SAFETY_ANALYSIS
+    uint32_t latency_l() const final REQUIRES(mutex());
 
                 // VolumeInterface
     void setMasterVolume(float value) final;

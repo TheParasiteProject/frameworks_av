@@ -2678,7 +2678,7 @@ sp<IAfTrack> PlaybackThread::createTrack_l(
             // cover audio hardware latency.
             // This is probably too conservative, but legacy application code may depend on it.
             // If you change this calculation, also review the start threshold which is related.
-            uint32_t latencyMs = latency_l();
+            uint32_t latencyMs = latency();
             if (latencyMs == 0) {
                 ALOGE("Error when retrieving output stream latency");
                 lStatus = UNKNOWN_ERROR;
@@ -2883,8 +2883,6 @@ uint32_t PlaybackThread::latency() const
     return latency_l();
 }
 uint32_t PlaybackThread::latency_l() const
-NO_THREAD_SAFETY_ANALYSIS
-// Fix later.
 {
     uint32_t latency;
     if (initCheck_l() == NO_ERROR && mOutput->stream->getLatency(&latency) == OK) {
@@ -3134,8 +3132,10 @@ status_t DirectOutputThread::selectPresentation(int presentationId, int programI
     return mOutput->stream->selectPresentation(presentationId, programId);
 }
 
-void PlaybackThread::ioConfigChanged_l(audio_io_config_event_t event, pid_t pid,
-                                                   audio_port_handle_t portId) {
+void PlaybackThread::ioConfigChanged_l(
+        audio_io_config_event_t event, pid_t pid, audio_port_handle_t portId)
+        NO_THREAD_SAFETY_ANALYSIS // TODO(b/420918374) fix
+{
     ALOGV("PlaybackThread::ioConfigChanged, thread %p, event %d", this, event);
     sp<AudioIoDescriptor> desc;
     const struct audio_patch patch = isMsdDevice() ? mDownStreamPatch : mPatch;
