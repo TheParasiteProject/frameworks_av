@@ -115,8 +115,7 @@ public:
             const wp<IAfTrackBase>& cookie)
             EXCLUDES_AudioFlinger_Mutex = 0;
 
-    // Hold either AudioFlinger::mutex or ThreadBase::mutex
-    virtual void ioConfigChanged_l(audio_io_config_event_t event,
+    virtual void ioConfigChanged(audio_io_config_event_t event,
             const sp<AudioIoDescriptor>& ioDesc,
             pid_t pid = 0) EXCLUDES_AudioFlinger_ClientMutex = 0;
     virtual void onNonOffloadableGlobalEffectEnable() EXCLUDES_AudioFlinger_Mutex = 0;
@@ -190,7 +189,7 @@ public:
     virtual void ioConfigChanged_l(
             audio_io_config_event_t event, pid_t pid = 0,
             audio_port_handle_t portId = AUDIO_PORT_HANDLE_NONE)
-            /* holds either AF::mutex or TB::mutex */ = 0;
+            REQUIRES(mutex()) = 0;
 
     // sendConfigEvent_l() must be called with ThreadBase::mLock held
     // Can temporarily release the lock if waiting for a reply from

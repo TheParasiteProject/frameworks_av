@@ -3133,9 +3133,7 @@ status_t DirectOutputThread::selectPresentation(int presentationId, int programI
 }
 
 void PlaybackThread::ioConfigChanged_l(
-        audio_io_config_event_t event, pid_t pid, audio_port_handle_t portId)
-        NO_THREAD_SAFETY_ANALYSIS // TODO(b/420918374) fix
-{
+        audio_io_config_event_t event, pid_t pid, audio_port_handle_t portId) {
     ALOGV("PlaybackThread::ioConfigChanged, thread %p, event %d", this, event);
     sp<AudioIoDescriptor> desc;
     const struct audio_patch patch = isMsdDevice() ? mDownStreamPatch : mPatch;
@@ -3156,7 +3154,7 @@ void PlaybackThread::ioConfigChanged_l(
         desc = sp<AudioIoDescriptor>::make(mId);
         break;
     }
-    mAfThreadCallback->ioConfigChanged_l(event, desc, pid);
+    mAfThreadCallback->ioConfigChanged(event, desc, pid);
 }
 
 void PlaybackThread::onWriteReady()
@@ -9917,7 +9915,7 @@ void RecordThread::ioConfigChanged_l(audio_io_config_event_t event, pid_t pid,
         desc = sp<AudioIoDescriptor>::make(mId);
         break;
     }
-    mAfThreadCallback->ioConfigChanged_l(event, desc, pid);
+    mAfThreadCallback->ioConfigChanged(event, desc, pid);
 }
 
 void RecordThread::readInputParameters_l()
@@ -10917,7 +10915,7 @@ void MmapThread::ioConfigChanged_l(audio_io_config_event_t event, pid_t pid,
         desc = sp<AudioIoDescriptor>::make(mId);
         break;
     }
-    mAfThreadCallback->ioConfigChanged_l(event, desc, pid);
+    mAfThreadCallback->ioConfigChanged(event, desc, pid);
 }
 
 status_t MmapThread::createAudioPatch_l(const struct audio_patch* patch,
