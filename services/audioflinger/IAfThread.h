@@ -157,7 +157,8 @@ public:
 
     virtual status_t readyToRun() = 0;
     virtual void clearPowerManager() EXCLUDES_ThreadBase_Mutex = 0;
-    virtual status_t initCheck() const = 0;
+    virtual status_t initCheck_l() const REQUIRES(mutex()) = 0;
+    virtual status_t initCheck() const EXCLUDES_ThreadBase_Mutex = 0;
     virtual type_t type() const = 0;
     virtual bool isDuplicating() const = 0;
     virtual audio_io_handle_t id() const = 0;

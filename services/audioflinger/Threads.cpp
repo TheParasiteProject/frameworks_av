@@ -2887,7 +2887,7 @@ NO_THREAD_SAFETY_ANALYSIS
 // Fix later.
 {
     uint32_t latency;
-    if (initCheck() == NO_ERROR && mOutput->stream->getLatency(&latency) == OK) {
+    if (initCheck_l() == NO_ERROR && mOutput->stream->getLatency(&latency) == OK) {
         return correctLatency_l(latency);
     }
     return 0;
@@ -3120,7 +3120,7 @@ String8 PlaybackThread::getParameters(const String8& keys)
 {
     audio_utils::lock_guard _l(mutex());
     String8 out_s8;
-    if (initCheck() == NO_ERROR && mOutput->stream->getParameters(keys, &out_s8) == OK) {
+    if (initCheck_l() == NO_ERROR && mOutput->stream->getParameters(keys, &out_s8) == OK) {
         return out_s8;
     }
     return {};
@@ -3488,7 +3488,7 @@ status_t PlaybackThread::getRenderPosition(
         return BAD_VALUE;
     }
     audio_utils::lock_guard _l(mutex());
-    if (initCheck() != NO_ERROR) {
+    if (initCheck_l() != NO_ERROR) {
         return INVALID_OPERATION;
     }
     int64_t framesWritten = mBytesWritten / mFrameSize;
@@ -9890,7 +9890,7 @@ bool RecordThread::checkForNewParameter_l(const String8& keyValuePair,
 String8 RecordThread::getParameters(const String8& keys)
 {
     audio_utils::lock_guard _l(mutex());
-    if (initCheck() == NO_ERROR) {
+    if (initCheck_l() == NO_ERROR) {
         String8 out_s8;
         if (mInput->stream->getParameters(keys, &out_s8) == OK) {
             return out_s8;
@@ -9980,7 +9980,7 @@ uint32_t RecordThread::getInputFramesLost() const
 {
     audio_utils::lock_guard _l(mutex());
     uint32_t result;
-    if (initCheck() == NO_ERROR && mInput->stream->getInputFramesLost(&result) == OK) {
+    if (initCheck_l() == NO_ERROR && mInput->stream->getInputFramesLost(&result) == OK) {
         return result;
     }
     return 0;
@@ -10889,7 +10889,7 @@ String8 MmapThread::getParameters(const String8& keys)
 {
     audio_utils::lock_guard _l(mutex());
     String8 out_s8;
-    if (initCheck() == NO_ERROR && mHalStream->getParameters(keys, &out_s8) == OK) {
+    if (initCheck_l() == NO_ERROR && mHalStream->getParameters(keys, &out_s8) == OK) {
         return out_s8;
     }
     return {};
