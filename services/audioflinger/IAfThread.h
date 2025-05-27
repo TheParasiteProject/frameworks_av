@@ -390,7 +390,8 @@ public:
     virtual void invalidateTracksForAudioSession(audio_session_t sessionId) const
             EXCLUDES_ThreadBase_Mutex = 0;
 
-    virtual bool isStreamInitialized() const = 0;
+    virtual bool isStreamInitialized_l() const REQUIRES(mutex()) = 0;
+    virtual bool isStreamInitialized() const EXCLUDES_ThreadBase_Mutex = 0;
     virtual void startMelComputation_l(const sp<audio_utils::MelProcessor>& processor)
             REQUIRES(audio_utils::AudioFlinger_Mutex) = 0;
     virtual void stopMelComputation_l()

@@ -3128,7 +3128,7 @@ String8 PlaybackThread::getParameters(const String8& keys)
 
 status_t DirectOutputThread::selectPresentation(int presentationId, int programId) {
     audio_utils::lock_guard _l(mutex());
-    if (!isStreamInitialized()) {
+    if (!isStreamInitialized_l()) {
         return NO_INIT;
     }
     return mOutput->stream->selectPresentation(presentationId, programId);
@@ -3434,7 +3434,7 @@ NO_THREAD_SAFETY_ANALYSIS
 
 ThreadBase::MetadataUpdate PlaybackThread::updateMetadata_l()
 {
-    if (!isStreamInitialized() || !mActiveTracks.readAndClearHasChanged()) {
+    if (!isStreamInitialized_l() || !mActiveTracks.readAndClearHasChanged()) {
         return {}; // nothing to do
     }
     StreamOutHalInterface::SourceMetadata metadata;
@@ -9442,7 +9442,7 @@ status_t RecordThread::getActiveMicrophones(
 {
     ALOGV("RecordThread::getActiveMicrophones");
      audio_utils::lock_guard _l(mutex());
-    if (!isStreamInitialized()) {
+    if (!isStreamInitialized_l()) {
         return NO_INIT;
     }
     status_t status = mInput->stream->getActiveMicrophones(activeMicrophones);
@@ -9454,7 +9454,7 @@ status_t RecordThread::setPreferredMicrophoneDirection(
 {
     ALOGV("setPreferredMicrophoneDirection(%d)", direction);
      audio_utils::lock_guard _l(mutex());
-    if (!isStreamInitialized()) {
+    if (!isStreamInitialized_l()) {
         return NO_INIT;
     }
     return mInput->stream->setPreferredMicrophoneDirection(direction);
@@ -9464,7 +9464,7 @@ status_t RecordThread::setPreferredMicrophoneFieldDimension(float zoom)
 {
     ALOGV("setPreferredMicrophoneFieldDimension(%f)", zoom);
      audio_utils::lock_guard _l(mutex());
-    if (!isStreamInitialized()) {
+    if (!isStreamInitialized_l()) {
         return NO_INIT;
     }
     return mInput->stream->setPreferredMicrophoneFieldDimension(zoom);
@@ -9525,7 +9525,7 @@ void RecordThread::resetAudioHistory_l() {
 
 ThreadBase::MetadataUpdate RecordThread::updateMetadata_l()
 {
-    if (!isStreamInitialized() || !mActiveTracks.readAndClearHasChanged()) {
+    if (!isStreamInitialized_l() || !mActiveTracks.readAndClearHasChanged()) {
         return {}; // nothing to do
     }
     StreamInHalInterface::SinkMetadata metadata;
@@ -11442,7 +11442,7 @@ NO_THREAD_SAFETY_ANALYSIS // access of track->processMuteEvent
 
 ThreadBase::MetadataUpdate MmapPlaybackThread::updateMetadata_l()
 {
-    if (!isStreamInitialized() || !mActiveTracks.readAndClearHasChanged()) {
+    if (!isStreamInitialized_l() || !mActiveTracks.readAndClearHasChanged()) {
         return {}; // nothing to do
     }
     StreamOutHalInterface::SourceMetadata metadata;
@@ -11595,7 +11595,7 @@ void MmapCaptureThread::processVolume_l()
 
 ThreadBase::MetadataUpdate MmapCaptureThread::updateMetadata_l()
 {
-    if (!isStreamInitialized() || !mActiveTracks.readAndClearHasChanged()) {
+    if (!isStreamInitialized_l() || !mActiveTracks.readAndClearHasChanged()) {
         return {}; // nothing to do
     }
     StreamInHalInterface::SinkMetadata metadata;
