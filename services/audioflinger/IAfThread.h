@@ -433,6 +433,16 @@ public:
 
     virtual void checkUpdateTrackMetadataForUid(uid_t uid) EXCLUDES_ThreadBase_Mutex = 0;
 
+    virtual AudioStreamOut* getOutput_l() const REQUIRES(mutex()) = 0;
+    virtual AudioStreamOut* getOutput() const EXCLUDES_ThreadBase_Mutex = 0;
+    virtual AudioStreamOut* clearOutput_l() REQUIRES(mutex()) = 0;
+    virtual AudioStreamOut* clearOutput() EXCLUDES_ThreadBase_Mutex = 0;
+
+    virtual AudioStreamIn* getInput_l() const REQUIRES(mutex()) = 0;
+    virtual AudioStreamIn* getInput() const EXCLUDES_ThreadBase_Mutex = 0;
+    virtual AudioStreamIn* clearInput_l() REQUIRES(mutex()) = 0;
+    virtual AudioStreamIn* clearInput() EXCLUDES_ThreadBase_Mutex = 0;
+
     // Dynamic cast to derived interface
     virtual sp<IAfDirectOutputThread> asIAfDirectOutputThread() { return nullptr; }
     virtual sp<IAfDuplicatingThread> asIAfDuplicatingThread() { return nullptr; }
@@ -510,10 +520,6 @@ public:
     virtual bool destroyTrack_l(const sp<IAfTrack>& track) REQUIRES(mutex()) = 0;
     virtual bool isTrackActive_l(const sp<IAfTrack>& track) const REQUIRES(mutex()) = 0;
     virtual void addOutputTrack_l(const sp<IAfTrack>& track) REQUIRES(mutex()) = 0;
-
-    virtual AudioStreamOut* getOutput_l() const REQUIRES(mutex()) = 0;
-    virtual AudioStreamOut* getOutput() const EXCLUDES_ThreadBase_Mutex = 0;
-    virtual AudioStreamOut* clearOutput() EXCLUDES_ThreadBase_Mutex = 0;
 
     // a very large number of suspend() will eventually wraparound, but unlikely
     virtual void suspend() = 0;
@@ -622,10 +628,6 @@ public:
     // return true if the caller should then do it's part of the stopping process
     virtual bool stop(IAfRecordTrack* recordTrack) EXCLUDES_ThreadBase_Mutex = 0;
 
-    // NO_THREAD_SAFETY_ANALYSIS: consider atomics
-    virtual AudioStreamIn* getInput() const = 0;
-    virtual AudioStreamIn* clearInput() = 0;
-
     virtual status_t getActiveMicrophones(
             std::vector<media::MicrophoneInfoFw>* activeMicrophones)
             const EXCLUDES_ThreadBase_Mutex = 0;
@@ -704,8 +706,6 @@ public:
     static sp<IAfMmapPlaybackThread> create(
             const sp<IAfThreadCallback>& afThreadCallback, audio_io_handle_t id,
             AudioHwDevice* hwDev, AudioStreamOut* output, bool systemReady);
-
-    virtual AudioStreamOut* clearOutput() EXCLUDES_ThreadBase_Mutex = 0;
 };
 
 class IAfMmapCaptureThread : public virtual IAfMmapThread {
@@ -713,8 +713,6 @@ public:
     static sp<IAfMmapCaptureThread> create(
             const sp<IAfThreadCallback>& afThreadCallback, audio_io_handle_t id,
             AudioHwDevice* hwDev, AudioStreamIn* input, bool systemReady);
-
-    virtual AudioStreamIn* clearInput() EXCLUDES_ThreadBase_Mutex = 0;
 };
 
 }  // namespace android
