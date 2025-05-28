@@ -870,12 +870,6 @@ aaudio_result_t AudioStreamInternal::processData(void *buffer, int32_t numFrames
         framesLeft -= (int32_t) framesProcessed;
         audioData += framesProcessed * getBytesPerFrame();
 
-        if (isDataCallbackSet() && framesLeft <= 0) {
-            // The client uses block write and all data has been written. There is no need to
-            // wait until the wakeup time.
-            break;
-        }
-
         // Should we block?
         if (timeoutNanoseconds == 0) {
             break; // don't block
