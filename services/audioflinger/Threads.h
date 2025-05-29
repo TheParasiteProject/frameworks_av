@@ -1214,9 +1214,8 @@ public:
 
     String8 getParameters(const String8& keys) EXCLUDES_ThreadBase_Mutex;
 
-    // Hold either the AudioFlinger::mutex or the ThreadBase::mutex
     void ioConfigChanged_l(audio_io_config_event_t event, pid_t pid = 0,
-            audio_port_handle_t portId = AUDIO_PORT_HANDLE_NONE) final;
+            audio_port_handle_t portId = AUDIO_PORT_HANDLE_NONE) final REQUIRES(mutex());
     status_t getRenderPosition(uint32_t* halFrames, uint32_t* dspFrames) const final
             EXCLUDES_ThreadBase_Mutex;
                 // Consider also removing and passing an explicit mMainBuffer initialization
@@ -2115,9 +2114,8 @@ public:
     virtual void cacheParameters_l() REQUIRES(mutex(), ThreadBase_ThreadLoop) {}
     virtual String8 getParameters(const String8& keys) EXCLUDES_ThreadBase_Mutex;
 
-    // Hold either the AudioFlinger::mutex or the ThreadBase::mutex
     void ioConfigChanged_l(audio_io_config_event_t event, pid_t pid = 0,
-            audio_port_handle_t portId = AUDIO_PORT_HANDLE_NONE) final;
+            audio_port_handle_t portId = AUDIO_PORT_HANDLE_NONE) final REQUIRES(mutex());
     virtual status_t    createAudioPatch_l(const struct audio_patch *patch,
             audio_patch_handle_t *handle) REQUIRES(mutex(), ThreadBase_ThreadLoop);
     status_t releaseAudioPatch_l(const audio_patch_handle_t handle)
@@ -2356,7 +2354,7 @@ class MmapThread : public ThreadBase, public virtual IAfMmapThread
     String8 getParameters(const String8& keys) final EXCLUDES_ThreadBase_Mutex;
     void ioConfigChanged_l(audio_io_config_event_t event, pid_t pid = 0,
             audio_port_handle_t portId = AUDIO_PORT_HANDLE_NONE) final
-            /* holds either AF::mutex or TB::mutex */;
+            REQUIRES(mutex());
     void readHalParameters_l() REQUIRES(mutex());
     void cacheParameters_l() final REQUIRES(mutex(), ThreadBase_ThreadLoop) {}
     status_t createAudioPatch_l(
