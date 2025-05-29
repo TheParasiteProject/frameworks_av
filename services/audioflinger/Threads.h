@@ -1020,6 +1020,18 @@ protected:
         return initCheck_l();
     }
 
+    bool isStreamInitialized_l() const final REQUIRES(mutex()) {
+        if (mIsOut) {
+            return !(mOutput == nullptr || mOutput->stream == nullptr);
+        } else {
+            return !(mInput == nullptr || mInput->stream == nullptr);
+        }
+    }
+    bool isStreamInitialized() const final EXCLUDES_ThreadBase_Mutex {
+        audio_utils::lock_guard _l(mutex());
+        return isStreamInitialized_l();
+    }
+
     private:
     void dumpBase_l(int fd, const Vector<String16>& args) REQUIRES(mutex());
     void dumpEffectChains_l(int fd, const Vector<String16>& args) REQUIRES(mutex());
@@ -1262,11 +1274,6 @@ public:
     bool isTimestampCorrectionEnabled_l() const final REQUIRES(mutex()) {
         return audio_is_output_devices(mTimestampCorrectedDevice)
                 && outDeviceTypes_l().count(mTimestampCorrectedDevice) != 0;
-                            }
-
-    // NO_THREAD_SAFETY_ANALYSIS - fix this to be atomic.
-    bool isStreamInitialized() const final {
-                                return !(mOutput == nullptr || mOutput->stream == nullptr);
                             }
 
     audio_channel_mask_t hapticChannelMask() const final {
@@ -2188,10 +2195,6 @@ public:
             int64_t sharedAudioStartMs = -1) REQUIRES(mutex());
     void resetAudioHistory_l() final REQUIRES(mutex());
 
-    bool isStreamInitialized() const final {
-                            return !(mInput == nullptr || mInput->stream == nullptr);
-                        }
-
     std::string getLocalLogHeader() const override;
 
 protected:
@@ -2390,8 +2393,6 @@ class MmapThread : public ThreadBase, public virtual IAfMmapThread
             audio_port_handle_t /* portId */, bool /* silenced */) override
             EXCLUDES_ThreadBase_Mutex {}
 
-    bool isStreamInitialized() const override { return false; }
-
     std::string getLocalLogHeader() const override;
 
     void setClientSilencedState_l(audio_port_handle_t portId, bool silenced) REQUIRES(mutex()) {
@@ -2488,10 +2489,6 @@ public:
 
     status_t getExternalPosition(uint64_t* position, int64_t* timeNanos) const final;
 
-    bool isStreamInitialized() const final {
-                                return !(mOutput == nullptr || mOutput->stream == nullptr);
-                            }
-
     status_t reportData(const void* buffer, size_t frameCount) final;
 
     void startMelComputation_l(const sp<audio_utils::MelProcessor>& processor) final
@@ -2538,10 +2535,6 @@ public:
     void toAudioPortConfig(struct audio_port_config* config) final;
 
     status_t getExternalPosition(uint64_t* position, int64_t* timeNanos) const final;
-
-    bool isStreamInitialized() const final {
-                                   return !(mInput == nullptr || mInput->stream == nullptr);
-                               }
 };
 
 class BitPerfectThread : public MixerThread {
