@@ -1007,6 +1007,19 @@ protected:
         return clearInput_l();
     }
 
+    status_t initCheck_l() const override REQUIRES(mutex()) {
+        if (mIsOut) {
+            return mOutput == nullptr ? NO_INIT : NO_ERROR;
+        } else {
+            return mInput == nullptr ? NO_INIT : NO_ERROR;
+        }
+    }
+
+    status_t initCheck() const final EXCLUDES_ThreadBase_Mutex {
+        audio_utils::lock_guard _l(mutex());
+        return initCheck_l();
+    }
+
     private:
     void dumpBase_l(int fd, const Vector<String16>& args) REQUIRES(mutex());
     void dumpEffectChains_l(int fd, const Vector<String16>& args) REQUIRES(mutex());
@@ -1119,8 +1132,6 @@ protected:
     void dumpTracks_l(int fd, const Vector<String16>& args) final REQUIRES(mutex());
 
 public:
-
-    status_t initCheck() const final { return mOutput == nullptr ? NO_INIT : NO_ERROR; }
 
                 // return estimated latency in milliseconds, as reported by HAL
     uint32_t latency() const final;
@@ -2057,8 +2068,6 @@ public:
     // RefBase
     void onFirstRef() final EXCLUDES_ThreadBase_Mutex;
 
-    status_t initCheck() const final { return mInput == nullptr ? NO_INIT : NO_ERROR; }
-
     sp<MemoryDealer> readOnlyHeap() const final { return mReadOnlyHeap; }
 
     sp<IMemory> pipeMemory() const final { return mPipeMemory; }
@@ -2335,7 +2344,9 @@ class MmapThread : public ThreadBase, public virtual IAfMmapThread
     virtual bool shouldStandby_l() final REQUIRES(mutex()){ return false; }
     virtual status_t exitStandby_l() final REQUIRES(mutex());
 
-    status_t initCheck() const final { return mHalStream == nullptr ? NO_INIT : NO_ERROR; }
+    status_t initCheck_l() const final {
+        return mHalStream == nullptr ? NO_INIT : NO_ERROR;
+    }
     size_t frameCount() const final { return mFrameCount; }
     bool checkForNewParameter_l(const String8& keyValuePair, status_t& status)
             final REQUIRES(mutex());
