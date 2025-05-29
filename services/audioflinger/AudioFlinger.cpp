@@ -1379,7 +1379,7 @@ status_t AudioFlinger::setMasterVolume(float value)
         if (thread->isDuplicating()) {
             continue;
         }
-        thread->setMasterVolume(value);
+        thread->asVolumeInterface()->setMasterVolume(value);
     }
 
     return NO_ERROR;
@@ -1417,7 +1417,7 @@ status_t AudioFlinger::setMasterBalance(float balance)
         if (thread->isDuplicating()) {
             continue;
         }
-        thread->setMasterBalance(balance);
+        thread->asVolumeInterface()->setMasterBalance(balance);
     }
 
     return NO_ERROR;
@@ -3925,15 +3925,13 @@ IAfMmapThread* AudioFlinger::checkMmapThread_l(audio_io_handle_t io) const
 sp<VolumeInterface> AudioFlinger::getVolumeInterface_l(audio_io_handle_t output) const {
     if (const auto it = mPlaybackThreads.find(output);
             it != mPlaybackThreads.end()) {
-        return it->second;
+        return it->second->asVolumeInterface();
     }
     if (const auto it = mMmapThreads.find(output);
             it != mMmapThreads.end()) {
         const auto& mmapThread = it->second;
         if (mmapThread->isOutput()) {
-            IAfMmapPlaybackThread* const mmapPlaybackThread =
-                    mmapThread->asIAfMmapPlaybackThread().get();
-            return mmapPlaybackThread;
+            return mmapThread->asVolumeInterface();
         }
     }
     return {};
@@ -3943,13 +3941,11 @@ std::vector<sp<VolumeInterface>> AudioFlinger::getAllVolumeInterfaces_l() const
 {
     std::vector<sp<VolumeInterface>> volumeInterfaces;
     for (const auto& [_, thread] : mPlaybackThreads) {
-        volumeInterfaces.push_back(thread);
+        volumeInterfaces.push_back(thread->asVolumeInterface());
     }
     for (const auto& [_, thread] : mMmapThreads) {
         if (thread->isOutput()) {
-            IAfMmapPlaybackThread* const mmapPlaybackThread =
-                    thread->asIAfMmapPlaybackThread().get();
-            volumeInterfaces.push_back(mmapPlaybackThread);
+            volumeInterfaces.push_back(thread->asVolumeInterface());
         }
     }
     return volumeInterfaces;

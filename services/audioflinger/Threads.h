@@ -1349,6 +1349,9 @@ public:
 
     std::string getLocalLogHeader() const override;
 
+    sp<VolumeInterface> asVolumeInterface() final {
+        return static_cast<VolumeInterface*>(this);
+    }
 
 protected:
     // updated by readOutputParameters_l()
@@ -2496,6 +2499,10 @@ public:
 
     std::optional<audio_offload_info_t> offloadInfo_l() const final REQUIRES(mutex()) {
         return mOffloadInfo;
+    }
+
+    sp<VolumeInterface> asVolumeInterface() final {
+       return static_cast<VolumeInterface*>(this);
     }
 
 protected:
