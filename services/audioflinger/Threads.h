@@ -2447,15 +2447,11 @@ class MmapThread : public ThreadBase, public virtual IAfMmapThread
     static constexpr int32_t kMaxNoCallbackWarnings = 5;
 };
 
-class MmapPlaybackThread : public MmapThread, public IAfMmapPlaybackThread,
+class MmapPlaybackThread : public MmapThread,
         public virtual VolumeInterface {
 public:
     MmapPlaybackThread(const sp<IAfThreadCallback>& afThreadCallback, audio_io_handle_t id,
                        AudioHwDevice *hwDev, AudioStreamOut *output, bool systemReady);
-
-    sp<IAfMmapPlaybackThread> asIAfMmapPlaybackThread() final {
-        return sp<IAfMmapPlaybackThread>::fromExisting(this);
-    }
 
     void configure(const audio_attributes_t* attr,
                    audio_stream_type_t streamType,
@@ -2522,15 +2518,11 @@ protected:
     mediautils::atomic_sp<audio_utils::MelProcessor> mMelProcessor;  // locked internally
 };
 
-class MmapCaptureThread : public MmapThread, public IAfMmapCaptureThread
+class MmapCaptureThread : public MmapThread
 {
 public:
     MmapCaptureThread(const sp<IAfThreadCallback>& afThreadCallback, audio_io_handle_t id,
                       AudioHwDevice *hwDev, AudioStreamIn *input, bool systemReady);
-
-    sp<IAfMmapCaptureThread> asIAfMmapCaptureThread() final {
-        return sp<IAfMmapCaptureThread>::fromExisting(this);
-    }
 
     MetadataUpdate updateMetadata_l() final REQUIRES(mutex());
     void processVolume_l() final REQUIRES(mutex());

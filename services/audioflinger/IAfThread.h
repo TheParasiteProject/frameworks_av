@@ -46,8 +46,6 @@ namespace android {
 
 class IAfDirectOutputThread;
 class IAfDuplicatingThread;
-class IAfMmapCaptureThread;
-class IAfMmapPlaybackThread;
 class IAfPlaybackThread;
 class IAfRecordThread;
 
@@ -671,6 +669,16 @@ public:
     static sp<MmapStreamInterface> createMmapStreamInterfaceAdapter(
             const sp<IAfMmapThread>& mmapThread);
 
+    // Creates a Mmap playback thread from an AudioStreamOut ptr.
+    static sp<IAfMmapThread> create(
+            const sp<IAfThreadCallback>& afThreadCallback, audio_io_handle_t id,
+            AudioHwDevice* hwDev, AudioStreamOut* output, bool systemReady);
+
+    // Creates a Mmap capture thread from an AudioStreamIn ptr.
+    static sp<IAfMmapThread> create(
+            const sp<IAfThreadCallback>& afThreadCallback, audio_io_handle_t id,
+            AudioHwDevice* hwDev, AudioStreamIn* input, bool systemReady);
+
     virtual void configure(
             const audio_attributes_t* attr,
             audio_stream_type_t streamType,
@@ -700,23 +708,7 @@ public:
     // Sets the UID records silence - TODO(b/291317898)  move to IAfMmapCaptureThread
     virtual void setRecordSilenced(audio_port_handle_t portId, bool silenced)
             EXCLUDES_ThreadBase_Mutex = 0;
-
-    virtual sp<IAfMmapPlaybackThread> asIAfMmapPlaybackThread() { return nullptr; }
-    virtual sp<IAfMmapCaptureThread> asIAfMmapCaptureThread() { return nullptr; }
 };
 
-class IAfMmapPlaybackThread : public virtual IAfMmapThread {
-public:
-    static sp<IAfMmapPlaybackThread> create(
-            const sp<IAfThreadCallback>& afThreadCallback, audio_io_handle_t id,
-            AudioHwDevice* hwDev, AudioStreamOut* output, bool systemReady);
-};
-
-class IAfMmapCaptureThread : public virtual IAfMmapThread {
-public:
-    static sp<IAfMmapCaptureThread> create(
-            const sp<IAfThreadCallback>& afThreadCallback, audio_io_handle_t id,
-            AudioHwDevice* hwDev, AudioStreamIn* input, bool systemReady);
-};
 
 }  // namespace android
