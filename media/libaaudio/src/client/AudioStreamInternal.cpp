@@ -31,6 +31,7 @@
 #include <media/AudioSystem.h>
 #include <media/MediaMetricsItem.h>
 #include <utils/Trace.h>
+#include <mediautils/SchedulingPolicyService.h>
 
 #include "AudioEndpointParcelable.h"
 #include "binding/AAudioBinderClient.h"
@@ -65,6 +66,9 @@ using namespace aaudio;
 
 // Minimum number of bursts to use when sample rate conversion is used.
 #define MIN_SAMPLE_RATE_CONVERSION_NUM_BURSTS    3
+
+// Matches kRealTimeAudioPriorityService in frameworks/av/services/oboeservice/AAudioService.h
+#define REAL_TIME_AUDIO_PRIORITY_SERVICE 3
 
 AudioStreamInternal::AudioStreamInternal(AAudioServiceInterface  &serviceInterface, bool inService)
         : AudioStream()
@@ -515,11 +519,7 @@ aaudio_result_t AudioStreamInternal::requestStart_l()
     // Start data callback thread.
     if (result == AAUDIO_OK && isDataCallbackSet()) {
         // Launch the callback loop thread.
-        int64_t periodNanos = mCallbackFrames
-                              * AAUDIO_NANOS_PER_SECOND
-                              / getSampleRate();
-        mCallbackEnabled.store(true);
-        result = createThread_l(periodNanos, aaudio_callback_thread_proc, this);
+        result = startCallback_l();
     }
     if (result != AAUDIO_OK) {
         setState(originalState);
@@ -561,6 +561,12 @@ aaudio_result_t AudioStreamInternal::stopCallback_l()
             isDataCallbackSet(), isActive(), getState());
         return AAUDIO_OK;
     }
+}
+
+aaudio_result_t AudioStreamInternal::startCallback_l() {
+    int64_t periodNanos = mCallbackFrames * AAUDIO_NANOS_PER_SECOND / getSampleRate();
+    mCallbackEnabled.store(true);
+    return createThread_l(periodNanos, aaudio_callback_thread_proc, this);
 }
 
 aaudio_result_t AudioStreamInternal::requestStop_l() {
@@ -611,6 +617,16 @@ aaudio_result_t AudioStreamInternal::registerThread() {
         ALOGW("%s() mServiceStreamHandle invalid", __func__);
         return AAUDIO_ERROR_INVALID_STATE;
     }
+    if (mInService) {
+        // Threads in the service can request for their own priority directly.
+        int err = android::requestPriority(getpid(), gettid(), REAL_TIME_AUDIO_PRIORITY_SERVICE,
+                                           true /* isForApp */);
+        if (err != 0) {
+            ALOGE("%s(%d) requestPriority failed, errno = %d", __func__, gettid(), err);
+            return AAUDIO_ERROR_INTERNAL;
+        }
+        return AAUDIO_OK;
+    }
     return mServiceInterface.registerAudioThread(mServiceStreamHandleInfo,
                                                  gettid(),
                                                  getPeriodNanoseconds());
@@ -620,6 +636,9 @@ aaudio_result_t AudioStreamInternal::unregisterThread() {
     if (getServiceHandle() == AAUDIO_HANDLE_INVALID) {
         ALOGW("%s() mServiceStreamHandle invalid", __func__);
         return AAUDIO_ERROR_INVALID_STATE;
+    }
+    if (mInService) {
+        return AAUDIO_OK;
     }
     return mServiceInterface.unregisterAudioThread(mServiceStreamHandleInfo, gettid());
 }
@@ -869,11 +888,6 @@ aaudio_result_t AudioStreamInternal::processData(void *buffer, int32_t numFrames
         }
         framesLeft -= (int32_t) framesProcessed;
         audioData += framesProcessed * getBytesPerFrame();
-
-        if (framesLeft <= 0) {
-            // No need to wait, all data has been written.
-            break;
-        }
 
         // Should we block?
         if (timeoutNanoseconds == 0) {
