@@ -7958,7 +7958,8 @@ void DuplicatingThread::addOutputTrack(IAfPlaybackThread* thread)
         return;
     }
     if (!audioserver_flags::portid_volume_management()) {
-        thread->setStreamVolume(AUDIO_STREAM_PATCH, /*volume=*/1.0f, /*muted=*/false);
+        thread->asVolumeInterface()->setStreamVolume(
+                AUDIO_STREAM_PATCH, /*volume=*/1.0f, /*muted=*/false);
     }
 
     mOutputTracks.emplace(outputTrack);

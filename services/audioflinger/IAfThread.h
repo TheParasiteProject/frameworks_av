@@ -444,6 +444,9 @@ public:
     virtual AudioStreamIn* clearInput_l() REQUIRES(mutex()) = 0;
     virtual AudioStreamIn* clearInput() EXCLUDES_ThreadBase_Mutex = 0;
 
+    // we use "asVolumeInterface" as the Thread has an isa relationship with VolumeInterface.
+    virtual sp<VolumeInterface> asVolumeInterface() { return nullptr; }
+
     // Dynamic cast to derived interface
     virtual sp<IAfDirectOutputThread> asIAfDirectOutputThread() { return nullptr; }
     virtual sp<IAfDuplicatingThread> asIAfDuplicatingThread() { return nullptr; }
@@ -452,7 +455,7 @@ public:
     virtual IAfThreadCallback* afThreadCallback() const = 0;
 };
 
-class IAfPlaybackThread : public virtual IAfThreadBase, public virtual VolumeInterface {
+class IAfPlaybackThread : public virtual IAfThreadBase {
 public:
     static sp<IAfPlaybackThread> createBitPerfectThread(
             const sp<IAfThreadCallback>& afThreadCallback, AudioStreamOut* output,
@@ -702,7 +705,7 @@ public:
     virtual sp<IAfMmapCaptureThread> asIAfMmapCaptureThread() { return nullptr; }
 };
 
-class IAfMmapPlaybackThread : public virtual IAfMmapThread, public virtual VolumeInterface {
+class IAfMmapPlaybackThread : public virtual IAfMmapThread {
 public:
     static sp<IAfMmapPlaybackThread> create(
             const sp<IAfThreadCallback>& afThreadCallback, audio_io_handle_t id,
