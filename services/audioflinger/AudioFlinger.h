@@ -711,8 +711,7 @@ private:
     std::list<sp<audioflinger::SyncEvent>> mPendingSyncEvents GUARDED_BY(mutex());
 
                 // Effect chains without a valid thread
-    DefaultKeyedVector<audio_session_t, sp<IAfEffectChain>> mOrphanEffectChains
-            GUARDED_BY(mutex());
+    std::map<audio_session_t, sp<IAfEffectChain>> mOrphanEffectChains GUARDED_BY(mutex());
 
                 // list of sessions for which a valid HW A/V sync ID was retrieved from the HAL
     DefaultKeyedVector<audio_session_t, audio_hw_sync_t> mHwAvSyncIds GUARDED_BY(mutex());
