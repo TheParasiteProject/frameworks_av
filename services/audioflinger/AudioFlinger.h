@@ -636,7 +636,7 @@ private:
 
     mutable audio_utils::mutex mClientMutex{audio_utils::MutexOrder::kAudioFlinger_ClientMutex};
 
-    DefaultKeyedVector<pid_t, wp<Client>> mClients GUARDED_BY(clientMutex());   // see ~Client()
+    std::map<pid_t, wp<Client>> mClients GUARDED_BY(clientMutex());   // see ~Client()
 
     audio_utils::mutex& hardwareMutex() const { return mHardwareMutex; }
 
