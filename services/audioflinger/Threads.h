@@ -341,7 +341,7 @@ public:
                 // sendConfigEvent_l() must be called with ThreadBase::mutex() held
                 // Can temporarily release the lock if waiting for a reply from
                 // processConfigEvents_l().
-    status_t sendConfigEvent_l(sp<ConfigEvent>& event) REQUIRES(mutex());
+    status_t sendConfigEvent_l(const sp<ConfigEvent>& event) REQUIRES(mutex());
     void sendIoConfigEvent(audio_io_config_event_t event, pid_t pid = 0,
             audio_port_handle_t portId = AUDIO_PORT_HANDLE_NONE) final EXCLUDES_ThreadBase_Mutex;
     void sendIoConfigEvent_l(audio_io_config_event_t event, pid_t pid = 0,
@@ -439,13 +439,13 @@ public:
                 // ThreadBase mutex before processing the mixer and effects. This guarantees the
                 // integrity of the chains during the process.
                 // Also sets the parameter 'effectChains' to current value of mEffectChains.
-    void lockEffectChains_l(Vector<sp<IAfEffectChain>>& effectChains) final
+    void lockEffectChains_l(std::vector<sp<IAfEffectChain>>& effectChains) final
             REQUIRES(audio_utils::ThreadBase_Mutex) ACQUIRE(audio_utils::EffectChain_Mutex);
                 // unlock effect chains after process
-    void unlockEffectChains(const Vector<sp<IAfEffectChain>>& effectChains) final
+    void unlockEffectChains(const std::vector<sp<IAfEffectChain>>& effectChains) final
             RELEASE(audio_utils::EffectChain_Mutex);
                 // get a copy of mEffectChains vector
-    Vector<sp<IAfEffectChain>> getEffectChains_l() const final REQUIRES(mutex()) {
+    const std::vector<sp<IAfEffectChain>>& getEffectChains_l() const final REQUIRES(mutex()) {
         return mEffectChains;
     }
                 // set audio mode to all effect chains
@@ -710,10 +710,10 @@ protected:
      // output device types and addresses
     AudioDeviceTypeAddrVector mOutDeviceTypeAddrs GUARDED_BY(mutex());
     AudioDeviceTypeAddr mInDeviceTypeAddr GUARDED_BY(mutex());   // input device type and address
-    Vector<sp<ConfigEvent>> mConfigEvents GUARDED_BY(mutex());
+    std::deque<sp<ConfigEvent>> mConfigEvents GUARDED_BY(mutex());
 
     // events awaiting system ready
-    Vector<sp<ConfigEvent>> mPendingConfigEvents GUARDED_BY(mutex());
+    std::vector<sp<ConfigEvent>> mPendingConfigEvents GUARDED_BY(mutex());
 
                 // These fields are written and read by thread itself without lock or barrier,
                 // and read by other threads without lock or barrier via standby(), outDeviceTypes()
@@ -728,7 +728,7 @@ protected:
                 audio_source_t          mAudioSource;
 
                 const audio_io_handle_t mId;
-    Vector<sp<IAfEffectChain>> mEffectChains GUARDED_BY(mutex());
+    std::vector<sp<IAfEffectChain>> mEffectChains GUARDED_BY(mutex());
 
                 static const int        kThreadNameLength = 16; // prctl(PR_SET_NAME) limit
                 char                    mThreadName[kThreadNameLength]; // guaranteed NUL-terminated
@@ -739,8 +739,7 @@ protected:
                 // list of suspended effects per session and per type. The first (outer) vector is
                 // keyed by session ID, the second (inner) by type UUID timeLow field
                 // Updated by updateSuspendedSessions_l() only.
-                KeyedVector< audio_session_t, KeyedVector< int, sp<SuspendedSessionDesc> > >
-                                        mSuspendedSessions;
+    std::map<audio_session_t, std::map<int, sp<SuspendedSessionDesc>>> mSuspendedSessions;
                 bool                    mSystemReady;
 
     // NO_THREAD_SAFETY_ANALYSIS - mTimestamp and mTimestampVerifier should be
@@ -2138,11 +2137,6 @@ public:
     uint32_t hasAudioSession_l(audio_session_t sessionId) const override REQUIRES(mutex()) {
                          return ThreadBase::hasAudioSession_l(sessionId, mTracks);
                      }
-
-            // Return the set of unique session IDs across all tracks.
-            // The keys are the session IDs, and the associated values are meaningless.
-            // FIXME replace by Set [and implement Bag/Multiset for other uses].
-            KeyedVector<audio_session_t, bool> sessionIds() const;
 
     status_t setSyncEvent(const sp<audioflinger::SyncEvent>& event) override
             EXCLUDES_ThreadBase_Mutex;
