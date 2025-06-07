@@ -7958,7 +7958,8 @@ void DuplicatingThread::addOutputTrack(IAfPlaybackThread* thread)
         return;
     }
     if (!audioserver_flags::portid_volume_management()) {
-        thread->setStreamVolume(AUDIO_STREAM_PATCH, /*volume=*/1.0f, /*muted=*/false);
+        thread->asVolumeInterface()->setStreamVolume(
+                AUDIO_STREAM_PATCH, /*volume=*/1.0f, /*muted=*/false);
     }
 
     mOutputTracks.emplace(outputTrack);
@@ -11230,7 +11231,7 @@ std::string MmapThread::getLocalLogHeader() const {
 }
 
 /* static */
-sp<IAfMmapPlaybackThread> IAfMmapPlaybackThread::create(
+sp<IAfMmapThread> IAfMmapThread::create(
         const sp<IAfThreadCallback>& afThreadCallback, audio_io_handle_t id,
         AudioHwDevice* hwDev,  AudioStreamOut* output, bool systemReady) {
     return sp<MmapPlaybackThread>::make(afThreadCallback, id, hwDev, output, systemReady);
@@ -11547,7 +11548,7 @@ void MmapPlaybackThread::dumpInternals_l(int fd, const Vector<String16>& args)
 }
 
 /* static */
-sp<IAfMmapCaptureThread> IAfMmapCaptureThread::create(
+sp<IAfMmapThread> IAfMmapThread::create(
         const sp<IAfThreadCallback>& afThreadCallback, audio_io_handle_t id,
         AudioHwDevice* hwDev,  AudioStreamIn* input, bool systemReady) {
     return sp<MmapCaptureThread>::make(afThreadCallback, id, hwDev, input, systemReady);
