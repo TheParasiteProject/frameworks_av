@@ -55,6 +55,13 @@ flag {
 }
 
 flag {
+    name: "dap_injection_starve_management"
+    namespace: "media_audio"
+    description: "Dynamic AudioPolicy management of injection starvation"
+    bug: "416965224"
+}
+
+flag {
     name: "deprecate_stream_bt_sco"
     namespace: "media_audio"
     description: "Deprecate STREAM_BLUETOOTH_SCO"
