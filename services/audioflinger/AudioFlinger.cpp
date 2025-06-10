@@ -397,13 +397,12 @@ status_t AudioFlinger::getMmapPolicyInfos(
     }
     if (mDevicesFactoryHal->getHalVersion() > kMaxAAudioPropertyDeviceHalVersion) {
         audio_utils::lock_guard lock(hardwareMutex());
-        for (size_t i = 0; i < mAudioHwDevs.size(); ++i) {
-            AudioHwDevice *dev = mAudioHwDevs.valueAt(i);
+        for (const auto& [module, audioHwDevice] : mAudioHwDevs) {
             std::vector<AudioMMapPolicyInfo> infos;
-            status_t status = dev->getMmapPolicyInfos(policyType, &infos);
+            const status_t status = audioHwDevice->getMmapPolicyInfos(policyType, &infos);
             if (status != NO_ERROR) {
-                ALOGE("Failed to query mmap policy info of %d, error %d",
-                      mAudioHwDevs.keyAt(i), status);
+                ALOGE("%s: Failed to query mmap policy info of %d, error %d",
+                      __func__, module, status);
                 continue;
             }
             policyInfos->insert(policyInfos->end(), infos.begin(), infos.end());
@@ -431,10 +430,12 @@ status_t AudioFlinger::setDeviceConnectedState(const struct audio_port_v7 *port,
     status_t result = NO_INIT;
     audio_utils::lock_guard _l(mutex());
     audio_utils::lock_guard lock(hardwareMutex());
-    AudioHwDevice *audioHwDevice = mAudioHwDevs.valueFor(port->ext.device.hw_module);
-    if (audioHwDevice != nullptr) {
+
+    if (auto it = mAudioHwDevs.find(port->ext.device.hw_module);
+            it != mAudioHwDevs.end()) {
+        const AudioHwDevice* const audioHwDevice = it->second;
         mHardwareStatus = AUDIO_HW_SET_CONNECTED_STATE;
-        sp<DeviceHalInterface> dev = audioHwDevice->hwDevice();
+        const sp<DeviceHalInterface>& dev = audioHwDevice->hwDevice();
         result = state == media::DeviceConnectedState::PREPARE_TO_DISCONNECT
                 ? dev->prepareToDisconnectExternalDevice(port)
                 : dev->setConnectedState(port, state == media::DeviceConnectedState::CONNECTED);
@@ -452,8 +453,9 @@ status_t AudioFlinger::setSimulateDeviceConnections(bool enabled) {
     audio_utils::lock_guard _l(mutex());
     audio_utils::lock_guard lock(hardwareMutex());
     mHardwareStatus = AUDIO_HW_SET_SIMULATE_CONNECTIONS;
-    for (size_t i = 0; i < mAudioHwDevs.size(); i++) {
-        sp<DeviceHalInterface> dev = mAudioHwDevs.valueAt(i)->hwDevice();
+
+    for (const auto& [_, audioHwDevice] : mAudioHwDevs) {
+        const sp<DeviceHalInterface>& dev = audioHwDevice->hwDevice();
         status_t result = dev->setSimulateDeviceConnections(enabled);
         if (result == OK) {
             at_least_one_succeeded = true;
@@ -492,9 +494,10 @@ AudioFlinger::~AudioFlinger()
         }
     }
 
-    for (size_t i = 0; i < mAudioHwDevs.size(); i++) {
+
+    for (const auto& [_, audioHwDevice] : mAudioHwDevs) {
         // no hardwareMutex() needed, as there are no other references to this
-        delete mAudioHwDevs.valueAt(i);
+        delete audioHwDevice;
     }
     mPatchCommandThread->exit();
 }
@@ -676,21 +679,25 @@ status_t AudioFlinger::openMmapStream(MmapStreamInterface::stream_direction_t di
 status_t AudioFlinger::addEffectToHal(
         const struct audio_port_config *device, const sp<EffectHalInterface>& effect) {
     audio_utils::lock_guard lock(hardwareMutex());
-    AudioHwDevice *audioHwDevice = mAudioHwDevs.valueFor(device->ext.device.hw_module);
-    if (audioHwDevice == nullptr) {
+    if (auto it = mAudioHwDevs.find(device->ext.device.hw_module);
+            it != mAudioHwDevs.end()) {
+        const AudioHwDevice* const audioHwDevice = it->second;
+        return audioHwDevice->hwDevice()->addDeviceEffect(device, effect);
+    } else {
         return NO_INIT;
     }
-    return audioHwDevice->hwDevice()->addDeviceEffect(device, effect);
 }
 
 status_t AudioFlinger::removeEffectFromHal(
         const struct audio_port_config *device, const sp<EffectHalInterface>& effect) {
     audio_utils::lock_guard lock(hardwareMutex());
-    AudioHwDevice *audioHwDevice = mAudioHwDevs.valueFor(device->ext.device.hw_module);
-    if (audioHwDevice == nullptr) {
+    if (auto it = mAudioHwDevs.find(device->ext.device.hw_module);
+            it != mAudioHwDevs.end()) {
+        const AudioHwDevice* const audioHwDevice = it->second;
+        return audioHwDevice->hwDevice()->removeDeviceEffect(device, effect);
+    } else {
         return NO_INIT;
     }
-    return audioHwDevice->hwDevice()->removeDeviceEffect(device, effect);
 }
 
 static const char * const audio_interfaces[] = {
@@ -712,9 +719,8 @@ AudioHwDevice* AudioFlinger::findSuitableHwDev_l(
             loadHwModule_ll(audio_interfaces[i]);
         }
         // then try to find a module supporting the requested device.
-        for (size_t i = 0; i < mAudioHwDevs.size(); i++) {
-            AudioHwDevice *audioHwDevice = mAudioHwDevs.valueAt(i);
-            sp<DeviceHalInterface> dev = audioHwDevice->hwDevice();
+        for (const auto& [_, audioHwDevice] : mAudioHwDevs) {
+            const sp<DeviceHalInterface>& dev = audioHwDevice->hwDevice();
             uint32_t supportedDevices;
             if (dev->getSupportedDevices(&supportedDevices) == OK &&
                     (supportedDevices & deviceType) == deviceType) {
@@ -723,9 +729,9 @@ AudioHwDevice* AudioFlinger::findSuitableHwDev_l(
         }
     } else {
         // check a match for the requested module handle
-        AudioHwDevice *audioHwDevice = mAudioHwDevs.valueFor(module);
-        if (audioHwDevice != NULL) {
-            return audioHwDevice;
+        if (auto it = mAudioHwDevs.find(module);
+                it != mAudioHwDevs.end()) {
+            return it->second;
         }
     }
 
@@ -1006,8 +1012,8 @@ status_t AudioFlinger::dump(int fd, const Vector<String16>& args)
             dprintf(fd, "\n ## BEGIN HAL dump \n");
             FallibleLockGuard ll{hardwareMutex()};
             // dump all hardware devs
-            for (size_t i = 0; i < mAudioHwDevs.size(); i++) {
-                sp<DeviceHalInterface> dev = mAudioHwDevs.valueAt(i)->hwDevice();
+            for (const auto& [_, audioHwDevice] : mAudioHwDevs) {
+                const sp<DeviceHalInterface>& dev = audioHwDevice->hwDevice();
                 dev->dump(fd, args);
             }
         }
@@ -1362,12 +1368,12 @@ status_t AudioFlinger::setMasterVolume(float value)
     // Set master volume in the HALs which support it.
     {
         audio_utils::lock_guard lock(hardwareMutex());
-        for (size_t i = 0; i < mAudioHwDevs.size(); i++) {
-            AudioHwDevice *dev = mAudioHwDevs.valueAt(i);
+
+        for (const auto& [_, audioHwDevice] : mAudioHwDevs) {
 
             mHardwareStatus = AUDIO_HW_SET_MASTER_VOLUME;
-            if (dev->canSetMasterVolume()) {
-                dev->hwDevice()->setMasterVolume(value);
+            if (audioHwDevice->canSetMasterVolume()) {
+                audioHwDevice->hwDevice()->setMasterVolume(value);
             }
             mHardwareStatus = AUDIO_HW_IDLE;
         }
@@ -1449,7 +1455,7 @@ status_t AudioFlinger::setMode(audio_mode_t mode)
         if (mPrimaryHardwareDev == nullptr) {
             return INVALID_OPERATION;
         }
-        sp<DeviceHalInterface> dev = mPrimaryHardwareDev.load()->hwDevice();
+        const sp<DeviceHalInterface>& dev = mPrimaryHardwareDev.load()->hwDevice();
         mHardwareStatus = AUDIO_HW_SET_MODE;
         ret = dev->setMode(mode);
         mHardwareStatus = AUDIO_HW_IDLE;
@@ -1490,15 +1496,16 @@ status_t AudioFlinger::setMicMute(bool state)
     if (mPrimaryHardwareDev == nullptr) {
         return INVALID_OPERATION;
     }
-    sp<DeviceHalInterface> primaryDev = mPrimaryHardwareDev.load()->hwDevice();
+    const sp<DeviceHalInterface>& primaryDev = mPrimaryHardwareDev.load()->hwDevice();
     if (primaryDev == nullptr) {
         ALOGW("%s: no primary HAL device", __func__);
         return INVALID_OPERATION;
     }
     mHardwareStatus = AUDIO_HW_SET_MIC_MUTE;
     ret = primaryDev->setMicMute(state);
-    for (size_t i = 0; i < mAudioHwDevs.size(); i++) {
-        sp<DeviceHalInterface> dev = mAudioHwDevs.valueAt(i)->hwDevice();
+
+    for (const auto& [module, audioHwDevice] : mAudioHwDevs) {
+        const sp<DeviceHalInterface>& dev = audioHwDevice->hwDevice();
         if (dev != primaryDev) {
             (void)dev->setMicMute(state);
         }
@@ -1518,7 +1525,7 @@ bool AudioFlinger::getMicMute() const
     if (mPrimaryHardwareDev == nullptr) {
         return false;
     }
-    sp<DeviceHalInterface> primaryDev = mPrimaryHardwareDev.load()->hwDevice();
+    const sp<DeviceHalInterface>& primaryDev = mPrimaryHardwareDev.load()->hwDevice();
     if (primaryDev == nullptr) {
         ALOGW("%s: no primary HAL device", __func__);
         return false;
@@ -1566,12 +1573,12 @@ status_t AudioFlinger::setMasterMute(bool muted)
     // Set master mute in the HALs which support it.
     {
         audio_utils::lock_guard lock(hardwareMutex());
-        for (size_t i = 0; i < mAudioHwDevs.size(); i++) {
-            AudioHwDevice *dev = mAudioHwDevs.valueAt(i);
+
+        for (const auto& [_, audioHwDevice] : mAudioHwDevs) {
 
             mHardwareStatus = AUDIO_HW_SET_MASTER_MUTE;
-            if (dev->canSetMasterMute()) {
-                dev->hwDevice()->setMasterMute(muted);
+            if (audioHwDevice->canSetMasterMute()) {
+                audioHwDevice->hwDevice()->setMasterMute(muted);
             }
             mHardwareStatus = AUDIO_HW_IDLE;
         }
@@ -1758,8 +1765,9 @@ status_t AudioFlinger::supportsBluetoothVariableLatency(bool* support) const {
     }
     audio_utils::lock_guard _l(hardwareMutex());
     *support = false;
-    for (size_t i = 0; i < mAudioHwDevs.size(); i++) {
-        if (mAudioHwDevs.valueAt(i)->supportsBluetoothVariableLatency()) {
+
+    for (const auto& [_, audioHwDevice] : mAudioHwDevs) {
+        if (audioHwDevice->supportsBluetoothVariableLatency()) {
              *support = true;
              break;
         }
@@ -1938,8 +1946,9 @@ status_t AudioFlinger::setParameters(audio_io_handle_t ioHandle, const String8& 
         {
             audio_utils::lock_guard lock(hardwareMutex());
             mHardwareStatus = AUDIO_HW_SET_PARAMETER;
-            for (size_t i = 0; i < mAudioHwDevs.size(); i++) {
-                sp<DeviceHalInterface> dev = mAudioHwDevs.valueAt(i)->hwDevice();
+
+            for (const auto& [_, audioHwDevice] : mAudioHwDevs) {
+                const sp<DeviceHalInterface>& dev = audioHwDevice->hwDevice();
                 status_t result = dev->setParameters(filteredKeyValuePairs);
                 // return success if at least one audio device accepts the parameters as not all
                 // HALs are requested to support all parameters. If no audio device supports the
@@ -2012,10 +2021,10 @@ String8 AudioFlinger::getParameters(audio_io_handle_t ioHandle, const String8& k
         String8 out_s8;
 
         audio_utils::lock_guard lock(hardwareMutex());
-        for (size_t i = 0; i < mAudioHwDevs.size(); i++) {
+        for (const auto& [_, audioHwDevice] : mAudioHwDevs) {
             String8 s;
             mHardwareStatus = AUDIO_HW_GET_PARAMETER;
-            sp<DeviceHalInterface> dev = mAudioHwDevs.valueAt(i)->hwDevice();
+            const sp<DeviceHalInterface>& dev = audioHwDevice->hwDevice();
             status_t result = dev->getParameters(keys, &s);
             mHardwareStatus = AUDIO_HW_IDLE;
             if (result == OK) out_s8 += s;
@@ -2175,7 +2184,7 @@ status_t AudioFlinger::setVoiceVolume(float value)
     if (mPrimaryHardwareDev == nullptr) {
         return INVALID_OPERATION;
     }
-    sp<DeviceHalInterface> dev = mPrimaryHardwareDev.load()->hwDevice();
+    const sp<DeviceHalInterface>& dev = mPrimaryHardwareDev.load()->hwDevice();
     mHardwareStatus = AUDIO_HW_SET_VOICE_VOLUME;
     ret = dev->setVoiceVolume(value);
     mHardwareStatus = AUDIO_HW_IDLE;
@@ -2674,10 +2683,11 @@ audio_module_handle_t AudioFlinger::loadHwModule(const char *name)
 // and AudioFlinger::hardwareMutex() held
 AudioHwDevice* AudioFlinger::loadHwModule_ll(const char *name)
 {
-    for (size_t i = 0; i < mAudioHwDevs.size(); i++) {
-        if (strncmp(mAudioHwDevs.valueAt(i)->moduleName(), name, strlen(name)) == 0) {
+
+    for (const auto& [_, audioHwDevice] : mAudioHwDevs) {
+        if (strncmp(audioHwDevice->moduleName(), name, strlen(name)) == 0) {
             ALOGW("loadHwModule() module %s already loaded", name);
-            return mAudioHwDevs.valueAt(i);
+            return audioHwDevice;
         }
     }
 
@@ -2768,7 +2778,7 @@ AudioHwDevice* AudioFlinger::loadHwModule_ll(const char *name)
         }
     }
 
-    mAudioHwDevs.add(handle, audioDevice);
+    mAudioHwDevs[handle] = audioDevice;
     if (strcmp(name, AUDIO_HARDWARE_MODULE_ID_STUB) != 0) {
         mInputBufferSizeOrderedDevs.insert(audioDevice);
     }
@@ -2890,14 +2900,14 @@ status_t AudioFlinger::setAudioPortConfig(const struct audio_port_config *config
 
     audio_utils::lock_guard _l(mutex());
     audio_utils::lock_guard lock(hardwareMutex());
-    ssize_t index = mAudioHwDevs.indexOfKey(module);
-    if (index < 0) {
+    if (auto it = mAudioHwDevs.find(module);
+            it != mAudioHwDevs.end()) {
+        const AudioHwDevice* const audioHwDevice = it->second;
+        return audioHwDevice->hwDevice()->setAudioPortConfig(config);
+    } else {
         ALOGW("%s() bad hw module %d", __func__, module);
         return BAD_VALUE;
     }
-
-    AudioHwDevice *audioHwDevice = mAudioHwDevs.valueAt(index);
-    return audioHwDevice->hwDevice()->setAudioPortConfig(config);
 }
 
 audio_hw_sync_t AudioFlinger::getAudioHwSyncForSession(audio_session_t sessionId)
@@ -3012,11 +3022,11 @@ status_t AudioFlinger::getMicrophones(std::vector<media::MicrophoneInfoFw>* micr
     audio_utils::lock_guard lock(hardwareMutex());
     status_t status = INVALID_OPERATION;
 
-    for (size_t i = 0; i < mAudioHwDevs.size(); i++) {
+
+    for (const auto& [_, audioHwDevice] : mAudioHwDevs) {
         std::vector<audio_microphone_characteristic_t> mics;
-        AudioHwDevice *dev = mAudioHwDevs.valueAt(i);
         mHardwareStatus = AUDIO_HW_GET_MICROPHONES;
-        status_t devStatus = dev->hwDevice()->getMicrophones(&mics);
+        const status_t devStatus = audioHwDevice->hwDevice()->getMicrophones(&mics);
         mHardwareStatus = AUDIO_HW_IDLE;
         if (devStatus == NO_ERROR) {
             // report success if at least one HW module supports the function.
