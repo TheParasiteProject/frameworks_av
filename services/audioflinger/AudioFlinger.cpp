@@ -757,8 +757,8 @@ void AudioFlinger::dumpClients_ll(int fd, bool dumpAllocators) {
 
     if (dumpAllocators) {
         result.append("Client Allocators:\n");
-        for (size_t i = 0; i < mClients.size(); ++i) {
-            sp<Client> client = mClients.valueAt(i).promote();
+        for (const auto& [_, client_wp] : mClients) {
+            sp<Client> client = client_wp.promote();
             if (client != 0) {
               result.appendFormat("Client: %d\n", client->pid());
               result.append(client->allocator().dump().c_str());
@@ -1040,12 +1040,14 @@ sp<Client> AudioFlinger::registerClient(pid_t pid, uid_t uid)
     audio_utils::lock_guard _cl(clientMutex());
     // If pid is already in the mClients wp<> map, then use that entry
     // (for which promote() is always != 0), otherwise create a new entry and Client.
-    sp<Client> client = mClients.valueFor(pid).promote();
-    if (client == 0) {
-        client = sp<Client>::make(sp<IAfClientCallback>::fromExisting(this), pid, uid);
-        mClients.add(pid, client);
+    if (auto it = mClients.find(pid);
+            it != mClients.end()) {
+        sp<Client> client = it->second.promote();
+        if (client != nullptr) return client;
+        // fall through to recreate
     }
-
+    auto client = sp<Client>::make(sp<IAfClientCallback>::fromExisting(this), pid, uid);
+    mClients[pid] = client;
     return client;
 }
 
@@ -2342,7 +2344,7 @@ void AudioFlinger::removeClient_l(pid_t pid)
 {
     ALOGV("removeClient_l() pid %d, calling pid %d", pid,
             IPCThreadState::self()->getCallingPid());
-    mClients.removeItem(pid);
+    mClients.erase(pid);
 }
 
 // getEffectThread_l() must be called with AudioFlinger::mutex() held
