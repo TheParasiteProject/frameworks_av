@@ -352,7 +352,7 @@ private:
             audio_output_flags_t* flags,
             audio_attributes_t attributes,
             int32_t mixPortHalId) final REQUIRES(mutex());
-    const DefaultKeyedVector<audio_module_handle_t, AudioHwDevice*>&
+    const std::map<audio_module_handle_t, AudioHwDevice*>&
             getAudioHwDevs_l() const final REQUIRES(mutex(), hardwareMutex()) {
               return mAudioHwDevs;
             }
@@ -646,8 +646,7 @@ private:
     // always take mMutex before mHardwareMutex
 
     std::atomic<AudioHwDevice*> mPrimaryHardwareDev = nullptr;
-    DefaultKeyedVector<audio_module_handle_t, AudioHwDevice*> mAudioHwDevs
-            GUARDED_BY(hardwareMutex()) {nullptr /* defValue */};
+    std::map<audio_module_handle_t, AudioHwDevice*> mAudioHwDevs GUARDED_BY(hardwareMutex());
 
     static bool inputBufferSizeDevsCmp(const AudioHwDevice* lhs, const AudioHwDevice* rhs);
     std::set<AudioHwDevice*, decltype(&inputBufferSizeDevsCmp)>

@@ -4971,7 +4971,7 @@ status_t PlaybackThread::createAudioPatch_l(const struct audio_patch *patch,
     mOutDeviceTypeAddrs = deviceTypeAddrs;
 
     if (mOutput->audioHwDev->supportsAudioPatches()) {
-        sp<DeviceHalInterface> hwDevice = mOutput->audioHwDev->hwDevice();
+        const sp<DeviceHalInterface>& hwDevice = mOutput->audioHwDev->hwDevice();
         status = hwDevice->createAudioPatch(patch->num_sources,
                                             patch->sources,
                                             patch->num_sinks,
@@ -5023,7 +5023,7 @@ status_t PlaybackThread::releaseAudioPatch_l(const audio_patch_handle_t handle)
     mOutDeviceTypeAddrs.clear();
 
     if (mOutput->audioHwDev->supportsAudioPatches()) {
-        sp<DeviceHalInterface> hwDevice = mOutput->audioHwDev->hwDevice();
+        const sp<DeviceHalInterface>& hwDevice = mOutput->audioHwDev->hwDevice();
         status = hwDevice->releaseAudioPatch(handle);
     } else {
         status = mOutput->stream->legacyReleaseAudioPatch();
@@ -10069,7 +10069,7 @@ status_t RecordThread::createAudioPatch_l(const struct audio_patch* patch,
     }
 
     if (mInput->audioHwDev->supportsAudioPatches()) {
-        sp<DeviceHalInterface> hwDevice = mInput->audioHwDev->hwDevice();
+        const sp<DeviceHalInterface>& hwDevice = mInput->audioHwDev->hwDevice();
         status = hwDevice->createAudioPatch(patch->num_sources,
                                             patch->sources,
                                             patch->num_sinks,
@@ -10110,7 +10110,7 @@ status_t RecordThread::releaseAudioPatch_l(const audio_patch_handle_t handle)
     mInDeviceTypeAddr.reset();
 
     if (mInput->audioHwDev->supportsAudioPatches()) {
-        sp<DeviceHalInterface> hwDevice = mInput->audioHwDev->hwDevice();
+        const sp<DeviceHalInterface>& hwDevice = mInput->audioHwDev->hwDevice();
         status = hwDevice->releaseAudioPatch(handle);
     } else {
         status = mInput->stream->legacyReleaseAudioPatch();

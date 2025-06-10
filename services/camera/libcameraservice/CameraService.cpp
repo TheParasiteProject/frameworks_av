@@ -38,6 +38,7 @@
 #include <aidl/AidlCameraService.h>
 #include <android-base/macros.h>
 #include <android-base/parseint.h>
+#include <android-base/strings.h>
 #include <android_companion_virtualdevice_flags.h>
 #include <android/companion/virtualnative/IVirtualDeviceManagerNative.h>
 #include <binder/ActivityManager.h>
@@ -5552,6 +5553,20 @@ void CameraService::cacheDump(const std::string& cameraId) {
     }
 }
 
+std::string CameraService::getActiveListenersStringLocked() {
+    bool locked = tryLock(mStatusListenerLock);
+    std::vector<pid_t> pidList;
+    std::string warningStr;
+    std::transform(mListenerList.begin(), mListenerList.end(), std::back_inserter(pidList),
+            [](auto element){ return element->getListenerPid(); });
+    if (locked) {
+        mStatusListenerLock.unlock();
+    } else {
+        warningStr = "(Couldn't lock status listener lock, possibly inconsistent state) ";
+    }
+    return warningStr + android::base::Join(pidList, ", ");
+}
+
 status_t CameraService::dump(int fd, const Vector<String16>& args) {
     ATRACE_CALL();
 
@@ -5585,8 +5600,10 @@ status_t CameraService::dump(int fd, const Vector<String16>& args) {
         dprintf(fd, "    Device %zu maps to \"%s\"\n", i, mNormalDeviceIds[i].c_str());
     }
     std::string activeClientString = mActiveClientManager.toString();
+    std::string activeListenersString = getActiveListenersStringLocked();
     dprintf(fd, "Active Camera Clients:\n%s", activeClientString.c_str());
     dprintf(fd, "Allowed user IDs: %s\n", toString(mAllowedUsers).c_str());
+    dprintf(fd, "Active Client listener PIDs: %s\n", activeListenersString.c_str());
     if (mStreamUseCaseOverrides.size() > 0) {
         dprintf(fd, "Active stream use case overrides:");
         for (int64_t useCaseOverride : mStreamUseCaseOverrides) {

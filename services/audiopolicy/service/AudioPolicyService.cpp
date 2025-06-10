@@ -154,6 +154,8 @@ BINDER_METHOD_ENTRY(setCurrentImeUid) \
 BINDER_METHOD_ENTRY(isHapticPlaybackSupported) \
 BINDER_METHOD_ENTRY(isUltrasoundSupported) \
 BINDER_METHOD_ENTRY(isHotwordStreamSupported) \
+BINDER_METHOD_ENTRY(getAttributesForStreamType) \
+BINDER_METHOD_ENTRY(getStreamTypeForAttributes) \
 BINDER_METHOD_ENTRY(listAudioProductStrategies) \
 BINDER_METHOD_ENTRY(getProductStrategyFromAudioAttributes) \
 BINDER_METHOD_ENTRY(listAudioVolumeGroups) \
@@ -1366,6 +1368,7 @@ status_t AudioPolicyService::onTransact(
         case TRANSACTION_setMinVolumeIndexForGroup:
         case TRANSACTION_getMaxVolumeIndexForGroup:
         case TRANSACTION_setMaxVolumeIndexForGroup:
+        case TRANSACTION_getVolumeGroupIdForStreamType:
         case TRANSACTION_isStreamActive:
         case TRANSACTION_isStreamActiveRemotely:
         case TRANSACTION_isSourceActive:
@@ -1384,6 +1387,7 @@ status_t AudioPolicyService::onTransact(
         case TRANSACTION_removeUserIdDeviceAffinities:
         case TRANSACTION_getHwOffloadFormatsSupportedForBluetoothMedia:
         case TRANSACTION_listAudioVolumeGroups:
+        case TRANSACTION_listAudioProductStrategies:
         case TRANSACTION_getVolumeGroupFromAudioAttributes:
         case TRANSACTION_acquireSoundTriggerSession:
         case TRANSACTION_releaseSoundTriggerSession:

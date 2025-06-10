@@ -7997,7 +7997,8 @@ DeviceVector AudioPolicyManager::getNewOutputDevices(const sp<SwAudioOutputDescr
                 ALOGW("%s: no device were retrieved for specified attributes", __func__);
             }
 
-            if (com::android::media::audioserver::enable_strict_port_routing_checks()) {
+            if (!outputDesc->isDuplicated()
+                    && com::android::media::audioserver::enable_strict_port_routing_checks()) {
                 // Filter out devices that are indicated by the HAL as non-routable.
                 auto routableDevices = devices.filter([&](auto device) {
                       return outputDesc->mProfile->routesToDevice(device); });

@@ -1847,7 +1847,7 @@ MediaPlayerService::AudioOutput::AudioOutput(audio_session_t sessionId,
         mAttributes = (audio_attributes_t *) calloc(1, sizeof(audio_attributes_t));
         if (mAttributes != NULL) {
             memcpy(mAttributes, attr, sizeof(audio_attributes_t));
-            mStreamType = AudioSystem::attributesToStreamType(*attr);
+            AudioSystem::getStreamTypeForAttributes(*attr, mStreamType);
         }
     } else {
         mAttributes = NULL;
@@ -2033,7 +2033,7 @@ void MediaPlayerService::AudioOutput::setAudioAttributes(const audio_attributes_
             mAttributes = (audio_attributes_t *) calloc(1, sizeof(audio_attributes_t));
         }
         memcpy(mAttributes, attributes, sizeof(audio_attributes_t));
-        mStreamType = AudioSystem::attributesToStreamType(*attributes);
+        AudioSystem::getStreamTypeForAttributes(*attributes, mStreamType);
     }
 }
 

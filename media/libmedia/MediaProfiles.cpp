@@ -400,6 +400,21 @@ MediaProfiles::detectAdvancedVideoProfile(
         }
         // flow does not get here
 
+    case VIDEO_ENCODER_APV:
+    {
+        *bitDepth = 10;
+        switch (profile) {
+        case APVProfile422_10HDR10:
+            *hdr = HDR_FORMAT_HDR10;
+            return true;
+        case APVProfile422_10HDR10Plus:
+            *hdr = HDR_FORMAT_HDR10PLUS;
+            return true;
+        default:
+            return false;
+        }
+    }
+    // flow does not get here
     default:
         return false;
     }
