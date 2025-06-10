@@ -2916,11 +2916,10 @@ audio_hw_sync_t AudioFlinger::getAudioHwSyncForSession(audio_session_t sessionId
 {
     audio_utils::lock_guard _l(mutex());
 
-    ssize_t index = mHwAvSyncIds.indexOfKey(sessionId);
-    if (index >= 0) {
-        ALOGV("getAudioHwSyncForSession found ID %d for session %d",
-              mHwAvSyncIds.valueAt(index), sessionId);
-        return mHwAvSyncIds.valueAt(index);
+    if (auto it = mHwAvSyncIds.find(sessionId);
+            it != mHwAvSyncIds.end()) {
+        ALOGV("%s: found ID %d for session %d", __func__, it->second, sessionId);
+        return it->second;
     }
 
     sp<DeviceHalInterface> dev;
@@ -2943,16 +2942,15 @@ audio_hw_sync_t AudioFlinger::getAudioHwSyncForSession(audio_session_t sessionId
     audio_hw_sync_t value = VALUE_OR_FATAL(result);
 
     // allow only one session for a given HW A/V sync ID.
-    for (size_t i = 0; i < mHwAvSyncIds.size(); i++) {
-        if (mHwAvSyncIds.valueAt(i) == value) {
-            ALOGV("getAudioHwSyncForSession removing ID %d for session %d",
-                  value, mHwAvSyncIds.keyAt(i));
-            mHwAvSyncIds.removeItemsAt(i);
+    for (const auto& [sessId2, avSyncId] : mHwAvSyncIds) {
+        if (avSyncId == value) {
+            ALOGV("%s: removing ID %d for session %d", __func__, value, sessId2);
+            mHwAvSyncIds.erase(sessId2);
             break;
         }
     }
 
-    mHwAvSyncIds.add(sessionId, value);
+    mHwAvSyncIds[sessionId] = value;
 
     for (const auto& [_, thread] : mPlaybackThreads) {
         uint32_t sessions = thread->hasAudioSession(sessionId);
@@ -3049,9 +3047,9 @@ status_t AudioFlinger::getMicrophones(std::vector<media::MicrophoneInfoFw>* micr
 void AudioFlinger::setAudioHwSyncForSession_l(
         IAfPlaybackThread* const thread, audio_session_t sessionId)
 {
-    ssize_t index = mHwAvSyncIds.indexOfKey(sessionId);
-    if (index >= 0) {
-        audio_hw_sync_t syncId = mHwAvSyncIds.valueAt(index);
+    if (auto it = mHwAvSyncIds.find(sessionId);
+            it != mHwAvSyncIds.end()) {
+        const audio_hw_sync_t syncId = it->second;
         ALOGV("setAudioHwSyncForSession_l found ID %d for session %d", syncId, sessionId);
         AudioParameter param = AudioParameter();
         param.addInt(String8(AudioParameter::keyStreamHwAvSync), syncId);
@@ -3059,6 +3057,8 @@ void AudioFlinger::setAudioHwSyncForSession_l(
         thread->setParameters(keyValuePairs);
         forwardParametersToDownstreamPatches_l(thread->id(), keyValuePairs,
                 [](const sp<IAfPlaybackThread>& thread) { return thread->usesHwAvSync(); });
+    } else {
+        ALOGD("%s: cannot find HwAvSyncId for session %d", __func__, sessionId);
     }
 }
 
