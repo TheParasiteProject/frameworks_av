@@ -966,8 +966,8 @@ status_t AudioFlinger::dump(int fd, const Vector<String16>& args)
         // dump orphan effect chains
         if (mOrphanEffectChains.size() != 0) {
             writeStr(fd, "  Orphan Effect Chains\n");
-            for (size_t i = 0; i < mOrphanEffectChains.size(); i++) {
-                mOrphanEffectChains.valueAt(i)->dump(fd, args);
+            for (const auto& [_, effectChain] : mOrphanEffectChains) {
+                effectChain->dump(fd, args);
             }
         }
         // dump historical threads in the last 10 seconds
@@ -3816,9 +3816,7 @@ std::vector< sp<IAfEffectModule> > AudioFlinger::purgeOrphanEffectChains_l()
 {
     ALOGV("purging stale effects from orphan chains");
     std::vector< sp<IAfEffectModule> > removedEffects;
-    for (size_t index = 0; index < mOrphanEffectChains.size(); index++) {
-        sp<IAfEffectChain> chain = mOrphanEffectChains.valueAt(index);
-        audio_session_t session = mOrphanEffectChains.keyAt(index);
+    for (const auto& [session, chain] : mOrphanEffectChains) {
         if (session == AUDIO_SESSION_OUTPUT_MIX || session == AUDIO_SESSION_DEVICE
                 || session == AUDIO_SESSION_OUTPUT_STAGE) {
             continue;
@@ -4852,7 +4850,7 @@ status_t AudioFlinger::moveEffectChain_ll(audio_session_t sessionId,
     // transfer all effects one by one so that new effect chain is created on new thread with
     // correct buffer sizes and audio parameters and effect engines reconfigured accordingly
     sp<IAfEffectChain> dstChain;
-    Vector<sp<IAfEffectModule>> removed;
+    std::vector<sp<IAfEffectModule>> removed;
     status_t status = NO_ERROR;
     std::string errorString;
     // process effects one by one.
@@ -4863,7 +4861,7 @@ status_t AudioFlinger::moveEffectChain_ll(audio_session_t sessionId,
         } else {
             chain->removeEffect(effect);
         }
-        removed.add(effect);
+        removed.push_back(effect);
         status = dstThread->addEffect_ll(effect);
         if (status != NO_ERROR) {
             errorString = StringPrintf(
@@ -5062,26 +5060,27 @@ status_t AudioFlinger::putOrphanEffectChain_l(const sp<IAfEffectChain>& chain)
     chain->setEffectSuspended_l(FX_IID_NS, false);
 
     audio_session_t session = chain->sessionId();
-    ssize_t index = mOrphanEffectChains.indexOfKey(session);
-    ALOGV("putOrphanEffectChain_l session %d index %zd", session, index);
-    if (index >= 0) {
-        ALOGW("putOrphanEffectChain_l chain for session %d already present", session);
+    ALOGV("%s: session %d", __func__, session);
+    if (auto it = mOrphanEffectChains.find(session);
+            it != mOrphanEffectChains.end()) {
+        ALOGW("%s: chain for session %d already present", __func__, session);
         return ALREADY_EXISTS;
     }
-    mOrphanEffectChains.add(session, chain);
+    mOrphanEffectChains[session] = chain;
     return NO_ERROR;
 }
 
 sp<IAfEffectChain> AudioFlinger::getOrphanEffectChain_l(audio_session_t session)
 {
-    sp<IAfEffectChain> chain;
-    ssize_t index = mOrphanEffectChains.indexOfKey(session);
-    ALOGV("getOrphanEffectChain_l session %d index %zd", session, index);
-    if (index >= 0) {
-        chain = mOrphanEffectChains.valueAt(index);
-        mOrphanEffectChains.removeItemsAt(index);
+    ALOGV("%s: session %d", __func__, session);
+    if (auto it = mOrphanEffectChains.find(session);
+            it != mOrphanEffectChains.end()) {
+        sp<IAfEffectChain> chain = it->second;
+        mOrphanEffectChains.erase(it);
+        return chain;
+    } else {
+        return {};
     }
-    return chain;
 }
 
 bool AudioFlinger::updateOrphanEffectChains(const sp<IAfEffectModule>& effect)
@@ -5093,13 +5092,13 @@ bool AudioFlinger::updateOrphanEffectChains(const sp<IAfEffectModule>& effect)
 bool AudioFlinger::updateOrphanEffectChains_l(const sp<IAfEffectModule>& effect)
 {
     audio_session_t session = effect->sessionId();
-    ssize_t index = mOrphanEffectChains.indexOfKey(session);
-    ALOGV("updateOrphanEffectChains session %d index %zd", session, index);
-    if (index >= 0) {
-        sp<IAfEffectChain> chain = mOrphanEffectChains.valueAt(index);
+    ALOGV("%s: session %d", __func__, session);
+    if (auto it = mOrphanEffectChains.find(session);
+            it != mOrphanEffectChains.end()) {
+        sp<IAfEffectChain> chain = it->second;
         if (chain->removeEffect(effect, true) == 0) {
-            ALOGV("updateOrphanEffectChains removing effect chain at index %zd", index);
-            mOrphanEffectChains.removeItemsAt(index);
+            ALOGV("%s: removing effect chain", __func__);
+            mOrphanEffectChains.erase(it);
         }
         return true;
     }
