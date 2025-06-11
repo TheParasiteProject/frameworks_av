@@ -1378,7 +1378,7 @@ Status CameraService::getTorchStrengthLevel(const std::string& unresolvedCameraI
             "strength level for device %s: %s (%d)", cameraId.c_str(),
             strerror(-res), res);
     }
-    ALOGI("%s: Torch strength level is: %d", __FUNCTION__, *torchStrength);
+    ALOGV("%s: Torch strength level is: %d", __FUNCTION__, *torchStrength);
     return Status::ok();
 }
 

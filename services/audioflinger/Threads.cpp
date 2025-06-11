@@ -731,17 +731,17 @@ status_t ThreadBase::setParameters(const String8& keyValuePairs)
 
 // sendConfigEvent_l() must be called with ThreadBase::mLock held
 // Can temporarily release the lock if waiting for a reply from processConfigEvents_l().
-status_t ThreadBase::sendConfigEvent_l(sp<ConfigEvent>& event)
+status_t ThreadBase::sendConfigEvent_l(const sp<ConfigEvent>& event)
 NO_THREAD_SAFETY_ANALYSIS  // condition variable
 {
     status_t status = NO_ERROR;
 
     if (event->mRequiresSystemReady && !mSystemReady) {
         event->mWaitStatus = false;
-        mPendingConfigEvents.add(event);
+        mPendingConfigEvents.push_back(event);
         return status;
     }
-    mConfigEvents.add(event);
+    mConfigEvents.push_back(event);
     ALOGV("sendConfigEvent_l() num events %zu event %d", mConfigEvents.size(), event->mType);
     mWaitWorkCV.notify_one();
     mutex().unlock();
@@ -888,10 +888,10 @@ void ThreadBase::processConfigEvents_l()
 {
     bool configChanged = false;
 
-    while (!mConfigEvents.isEmpty()) {
+    while (!mConfigEvents.empty()) {
         ALOGV("processConfigEvents_l() remaining events %zu", mConfigEvents.size());
-        sp<ConfigEvent> event = mConfigEvents[0];
-        mConfigEvents.removeAt(0);
+        sp<ConfigEvent> event = mConfigEvents.front();
+        mConfigEvents.pop_front();
         switch (event->mType) {
         case CFG_EVENT_PRIO: {
             PrioConfigEventData *data = (PrioConfigEventData *)event->mData.get();
@@ -1344,18 +1344,16 @@ void ThreadBase::setEffectSuspended_l(
 
 void ThreadBase::checkSuspendOnAddEffectChain_l(const sp<IAfEffectChain>& chain)
 {
-    ssize_t index = mSuspendedSessions.indexOfKey(chain->sessionId());
-    if (index < 0) {
+    auto it = mSuspendedSessions.find(chain->sessionId());
+    if (it == mSuspendedSessions.end()) {
         return;
     }
 
-    const KeyedVector <int, sp<SuspendedSessionDesc> >& sessionEffects =
-            mSuspendedSessions.valueAt(index);
+    const std::map<int, sp<SuspendedSessionDesc>>& sessionEffects = it->second;
 
-    for (size_t i = 0; i < sessionEffects.size(); i++) {
-        const sp<SuspendedSessionDesc>& desc = sessionEffects.valueAt(i);
+    for (const auto& [key, desc] : sessionEffects) {
         for (int j = 0; j < desc->mRefCount; j++) {
-            if (sessionEffects.keyAt(i) == IAfEffectChain::kKeyForSuspendAll) {
+            if (key == IAfEffectChain::kKeyForSuspendAll) {
                 chain->setEffectSuspendedAll_l(true);
             } else {
                 ALOGV("checkSuspendOnAddEffectChain_l() suspending effects %08x",
@@ -1370,21 +1368,21 @@ void ThreadBase::updateSuspendedSessions_l(const effect_uuid_t* type,
                                                          bool suspend,
                                                          audio_session_t sessionId)
 {
-    ssize_t index = mSuspendedSessions.indexOfKey(sessionId);
-
-    KeyedVector <int, sp<SuspendedSessionDesc> > sessionEffects;
+    const auto it = mSuspendedSessions.find(sessionId);
+    std::map<int, sp<SuspendedSessionDesc>> sessionEffects;
 
     if (suspend) {
-        if (index >= 0) {
-            sessionEffects = mSuspendedSessions.valueAt(index);
+        if (it != mSuspendedSessions.end()) {
+            sessionEffects = it->second;
         } else {
-            mSuspendedSessions.add(sessionId, sessionEffects);
+            // empty effects map to be filled in below as needed.
+            mSuspendedSessions[sessionId] = sessionEffects;
         }
     } else {
-        if (index < 0) {
+        if (it == mSuspendedSessions.end()) {
             return;
         }
-        sessionEffects = mSuspendedSessions.valueAt(index);
+        sessionEffects = it->second;
     }
 
 
@@ -1392,38 +1390,38 @@ void ThreadBase::updateSuspendedSessions_l(const effect_uuid_t* type,
     if (type != NULL) {
         key = type->timeLow;
     }
-    index = sessionEffects.indexOfKey(key);
+    const auto it2 = sessionEffects.find(key);
 
     sp<SuspendedSessionDesc> desc;
     if (suspend) {
-        if (index >= 0) {
-            desc = sessionEffects.valueAt(index);
+        if (it2 != sessionEffects.end()) {
+            desc = it2->second;
         } else {
             desc = new SuspendedSessionDesc();
             if (type != NULL) {
                 desc->mType = *type;
             }
-            sessionEffects.add(key, desc);
+            sessionEffects[key] = desc;
             ALOGV("updateSuspendedSessions_l() suspend adding effect %08x", key);
         }
         desc->mRefCount++;
     } else {
-        if (index < 0) {
+        if (it2 == sessionEffects.end()) {
             return;
         }
-        desc = sessionEffects.valueAt(index);
+        desc = it2->second;
         if (--desc->mRefCount == 0) {
             ALOGV("updateSuspendedSessions_l() restore removing effect %08x", key);
-            sessionEffects.removeItemsAt(index);
-            if (sessionEffects.isEmpty()) {
+            sessionEffects.erase(it2);
+            if (sessionEffects.empty()) {
                 ALOGV("updateSuspendedSessions_l() restore removing session %d",
                                  sessionId);
-                mSuspendedSessions.removeItem(sessionId);
+                mSuspendedSessions.erase(it);
             }
         }
     }
-    if (!sessionEffects.isEmpty()) {
-        mSuspendedSessions.replaceValueFor(sessionId, sessionEffects);
+    if (!sessionEffects.empty()) {
+        mSuspendedSessions[sessionId] = sessionEffects;
     }
 }
 
@@ -1896,7 +1894,7 @@ void ThreadBase::removeEffect_l(const sp<IAfEffectModule>& effect, bool release)
     }
 }
 
-void ThreadBase::lockEffectChains_l(Vector<sp<IAfEffectChain>>& effectChains)
+void ThreadBase::lockEffectChains_l(std::vector<sp<IAfEffectChain>>& effectChains)
         NO_THREAD_SAFETY_ANALYSIS  // calls EffectChain::lock()
 {
     effectChains = mEffectChains;
@@ -1905,7 +1903,7 @@ void ThreadBase::lockEffectChains_l(Vector<sp<IAfEffectChain>>& effectChains)
     }
 }
 
-void ThreadBase::unlockEffectChains(const Vector<sp<IAfEffectChain>>& effectChains)
+void ThreadBase::unlockEffectChains(const std::vector<sp<IAfEffectChain>>& effectChains)
         NO_THREAD_SAFETY_ANALYSIS  // calls EffectChain::unlock()
 {
     for (const auto& effectChain : effectChains) {
@@ -1959,8 +1957,8 @@ void ThreadBase::systemReady()
     }
     mSystemReady = true;
 
-    for (size_t i = 0; i < mPendingConfigEvents.size(); i++) {
-        sendConfigEvent_l(mPendingConfigEvents.editItemAt(i));
+    for (const auto& configEvent : mPendingConfigEvents) {
+        sendConfigEvent_l(configEvent);
     }
     mPendingConfigEvents.clear();
 }
@@ -3399,7 +3397,7 @@ NO_THREAD_SAFETY_ANALYSIS
     // matter.
     // create a copy of mEffectChains as calling moveEffectChain_ll()
     // can reorder some effect chains
-    Vector<sp<IAfEffectChain>> effectChains = mEffectChains;
+    std::vector<sp<IAfEffectChain>> effectChains = mEffectChains;
     for (size_t i = 0; i < effectChains.size(); i ++) {
         mAfThreadCallback->moveEffectChain_ll(effectChains[i]->sessionId(),
             this/* srcThread */, this/* dstThread */);
@@ -3879,6 +3877,8 @@ status_t PlaybackThread::addEffectChain_l(const sp<IAfEffectChain>& chain)
             AUDIO_SESSION_OUTPUT_STAGE < AUDIO_SESSION_OUTPUT_MIX &&
             AUDIO_SESSION_DEVICE < AUDIO_SESSION_OUTPUT_STAGE,
             "audio_session_t constants misdefined");
+
+    // Number of chains are small, but the array is sorted so could use std::lower_bound().
     size_t size = mEffectChains.size();
     size_t i = 0;
     for (i = 0; i < size; i++) {
@@ -3886,7 +3886,7 @@ status_t PlaybackThread::addEffectChain_l(const sp<IAfEffectChain>& chain)
             break;
         }
     }
-    mEffectChains.insertAt(chain, i);
+    mEffectChains.insert(mEffectChains.begin() + i, chain);
     checkSuspendOnAddEffectChain_l(chain);
 
     return NO_ERROR;
@@ -3898,9 +3898,9 @@ size_t PlaybackThread::removeEffectChain_l(const sp<IAfEffectChain>& chain)
 
     ALOGV("removeEffectChain_l() %p from thread %p for session %d", chain.get(), this, session);
 
-    for (size_t i = 0; i < mEffectChains.size(); i++) {
-        if (chain == mEffectChains[i]) {
-            mEffectChains.removeAt(i);
+    for (auto it = mEffectChains.begin() ; it != mEffectChains.end(); ++it) {
+        if (chain == *it) {
+            (void) mEffectChains.erase(it);  // okay not to update it as we break below.
             // detach all active tracks from the chain
             for (const auto& track : mActiveTracks) {
                 if (session == track->sessionId()) {
@@ -4040,7 +4040,7 @@ NO_THREAD_SAFETY_ANALYSIS  // manual locking of AudioFlinger
     {
         cpuStats.sample(myName);
 
-        Vector<sp<IAfEffectChain>> effectChains;
+        std::vector<sp<IAfEffectChain>> effectChains;
         audio_session_t activeHapticSessionId = AUDIO_SESSION_NONE;
         bool isHapticSessionSpatialized = false;
         std::vector<sp<IAfTrackBase>> activeTracks;
@@ -4151,7 +4151,7 @@ NO_THREAD_SAFETY_ANALYSIS  // manual locking of AudioFlinger
                     sendStatistics(false /* force */);
                 }
 
-                if (mActiveTracks.empty() && mConfigEvents.isEmpty()) {
+                if (mActiveTracks.empty() && mConfigEvents.empty()) {
                     // we're about to wait, flush the binder command buffer
                     IPCThreadState::self()->flushCommands();
 
@@ -4609,7 +4609,7 @@ NO_THREAD_SAFETY_ANALYSIS  // manual locking of AudioFlinger
                     // update sleep time (which is >= 0)
                     mSleepTimeUs = deltaNs / 1000;
                 }
-                if (!mSignalPending && mConfigEvents.isEmpty() && !exitPending()) {
+                if (!mSignalPending && mConfigEvents.empty() && !exitPending()) {
                     mWaitWorkCV.wait_for(_l, std::chrono::microseconds(mSleepTimeUs));
                 }
                 ATRACE_END();
@@ -6847,7 +6847,7 @@ void DirectOutputThread::processVolume_l(const sp<IAfTrack>& track, bool lastTra
             // Delegate volume control to effect in track effect chain if needed
             // only one effect chain can be present on DirectOutputThread, so if
             // there is one, the track is connected to it
-            if (!mEffectChains.isEmpty()) {
+            if (!mEffectChains.empty()) {
                 // if effect chain exists, volume is handled by it.
                 // Convert volumes from float to 8.24
                 uint32_t vl = (uint32_t)(left * (1 << 24));
@@ -7015,7 +7015,7 @@ PlaybackThread::mixer_state DirectOutputThread::prepareTracks_l(
         } else {
             // clear effect chain input buffer if the last active track started underruns
             // to avoid sending previous audio buffer again to effects
-            if (!mEffectChains.isEmpty() && last) {
+            if (!mEffectChains.empty() && last) {
                 mEffectChains[0]->clearInputBuffer();
             }
             if (track->isStopping_1()) {
@@ -8417,10 +8417,10 @@ reacquire_wakelock:
         // Note: these sp<> are released at the end of the for loop outside of the mutex() lock.
         sp<IAfRecordTrack> activeTrack;
         std::vector<sp<IAfRecordTrack>> oldActiveTracks;
-        Vector<sp<IAfEffectChain>> effectChains;
+        std::vector<sp<IAfEffectChain>> effectChains;
 
         // activeTracks accumulates a copy of a subset of mActiveTracks
-        Vector<sp<IAfRecordTrack>> activeTracks;
+        std::vector<sp<IAfRecordTrack>> activeTracks;
 
         // reference to the (first and only) active fast track
         sp<IAfRecordTrack> fastTrack;
@@ -8555,7 +8555,7 @@ reacquire_wakelock:
                     fastTrack = activeTrack;
                 }
 
-                activeTracks.add(activeTrack);
+                activeTracks.push_back(activeTrack);
                 ++it;
             }
 
@@ -8583,7 +8583,7 @@ reacquire_wakelock:
             }
 
             // sleep if there are no active tracks to process
-            if (activeTracks.isEmpty()) {
+            if (activeTracks.empty()) {
                 if (sleepUs == 0) {
                     sleepUs = kRecordThreadSleepUs;
                 }
@@ -9985,19 +9985,6 @@ uint32_t RecordThread::getInputFramesLost() const
     return 0;
 }
 
-KeyedVector<audio_session_t, bool> RecordThread::sessionIds() const
-{
-    KeyedVector<audio_session_t, bool> ids;
-    audio_utils::lock_guard _l(mutex());
-    for (const auto& track : mTracks) {
-        audio_session_t sessionId = track->sessionId();
-        if (ids.indexOfKey(sessionId) < 0) {
-            ids.add(sessionId, true);
-        }
-    }
-    return ids;
-}
-
 AudioStreamIn* RecordThread::clearInput_l()
 {
     AudioStreamIn* input = ThreadBase::clearInput_l();
@@ -10027,7 +10014,7 @@ status_t RecordThread::addEffectChain_l(const sp<IAfEffectChain>& chain)
     // just moved them to a new input stream.
     chain->syncHalEffectsState_l();
 
-    mEffectChains.add(chain);
+    mEffectChains.push_back(chain);
 
     return NO_ERROR;
 }
@@ -10035,13 +10022,7 @@ status_t RecordThread::addEffectChain_l(const sp<IAfEffectChain>& chain)
 size_t RecordThread::removeEffectChain_l(const sp<IAfEffectChain>& chain)
 {
     ALOGV("removeEffectChain_l() %p from thread %p", chain.get(), this);
-
-    for (size_t i = 0; i < mEffectChains.size(); i++) {
-        if (chain == mEffectChains[i]) {
-            mEffectChains.removeAt(i);
-            break;
-        }
-    }
+    std::erase(mEffectChains, chain);
     return mEffectChains.size();
 }
 
@@ -10801,7 +10782,7 @@ bool MmapThread::threadLoop()
 
     while (!exitPending())
     {
-        Vector<sp<IAfEffectChain>> effectChains;
+        std::vector<sp<IAfEffectChain>> effectChains;
 
         { // under Thread lock
         audio_utils::unique_lock _l(mutex());
@@ -10810,7 +10791,7 @@ bool MmapThread::threadLoop()
             // A signal was raised while we were unlocked
             mSignalPending = false;
         } else {
-            if (mConfigEvents.isEmpty()) {
+            if (mConfigEvents.empty()) {
                 // we're about to wait, flush the binder command buffer
                 IPCThreadState::self()->flushCommands();
 
@@ -11079,7 +11060,7 @@ status_t MmapThread::addEffectChain_l(const sp<IAfEffectChain>& chain)
     chain->setOutBuffer(nullptr);
     chain->syncHalEffectsState_l();
 
-    mEffectChains.add(chain);
+    mEffectChains.push_back(chain);
     checkSuspendOnAddEffectChain_l(chain);
     return NO_ERROR;
 }
@@ -11090,9 +11071,9 @@ size_t MmapThread::removeEffectChain_l(const sp<IAfEffectChain>& chain)
 
     ALOGV("removeEffectChain_l() %p from thread %p for session %d", chain.get(), this, session);
 
-    for (size_t i = 0; i < mEffectChains.size(); i++) {
-        if (chain == mEffectChains[i]) {
-            mEffectChains.removeAt(i);
+    for (auto it = mEffectChains.begin(); it != mEffectChains.end(); ++it) {
+        if (chain == *it) {
+            (void) mEffectChains.erase(it);  // we break at the end.
             // detach all active tracks from the chain
             // detach all tracks with same session ID from this chain
             for (const auto& track : mActiveTracks) {
@@ -11383,7 +11364,7 @@ NO_THREAD_SAFETY_ANALYSIS // access of track->processMuteEvent
         // Delegate volume control to effect in track effect chain if needed
         // only one effect chain can be present on DirectOutputThread, so if
         // there is one, the track is connected to it
-        if (!mEffectChains.isEmpty()) {
+        if (!mEffectChains.empty()) {
             mEffectChains[0]->setVolume(&vol, &vol);
             volume = (float)vol / (1 << 24);
         }
