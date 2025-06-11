@@ -3874,7 +3874,7 @@ status_t AudioPolicyManager::setVolumeIndexForGroup(volume_group_t group,
         if (desc->useHwGain()) {
             bool swMute = com_android_media_audio_ring_my_car() ? curves.isMuted() : (index == 0);
             // If the volume source is active with higher priority source, ensure at least Sw Muted
-            desc->setSwMute(swMute, vs, curves.getStreamTypes(), curDevices, 0 /*delayMs*/);
+            desc->setSwMute(swMute, vs, curDevices, 0 /*delayMs*/);
             if (!desc->canSetVolumeForVolumeSource(activityVs)) {
                 continue; // next output
             }
