@@ -7725,7 +7725,7 @@ void AudioPolicyManager::checkOutputForAttributes(const audio_attributes_t &attr
 
             bool invalidate = false;
             for (auto client : desc->clientsList(false /*activeOnly*/)) {
-                if (client->isInvalid()) {
+                if (client->isInvalid() || client->isCallRx()) {
                     continue;
                 }
                 if (desc->isDuplicated() || !desc->mProfile->isDirectOutput()) {
