@@ -121,13 +121,6 @@ flag {
 
 flag {
     namespace: "camera_platform"
-    name: "enable_hal_abort_from_cameraservicewatchdog"
-    description: "Enable CameraServiceWatchdog to abort camera HAL to generate HAL tombstones"
-    bug: "349652177"
-}
-
-flag {
-    namespace: "camera_platform"
     name: "depth_jpeg_extensions"
     description: "Add Depth Jpeg extension output support"
     bug: "362788689"
