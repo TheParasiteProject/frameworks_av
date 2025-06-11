@@ -778,8 +778,7 @@ void AudioFlinger::dumpClients_ll(int fd, bool dumpAllocators) {
 
     result.append("Global session refs:\n");
     result.append("  session  cnt     pid    uid  name\n");
-    for (size_t i = 0; i < mAudioSessionRefs.size(); i++) {
-        AudioSessionRef *r = mAudioSessionRefs[i];
+    for (const auto* r : mAudioSessionRefs) {
         const std::shared_ptr<const mediautils::UidInfo::Info> info =
                 mediautils::UidInfo::getInfo(r->mUid);
         result.appendFormat("  %7d %4d %7d %6u  %s\n", r->mSessionid, r->mCnt, r->mPid,
@@ -2259,19 +2258,17 @@ void AudioFlinger::removeNotificationClient(pid_t pid)
         }
 
         ALOGV("%d died, releasing its sessions", pid);
-        size_t num = mAudioSessionRefs.size();
         bool removed = false;
-        for (size_t i = 0; i < num; ) {
-            AudioSessionRef *ref = mAudioSessionRefs.itemAt(i);
-            ALOGV(" pid %d @ %zu", ref->mPid, i);
+        for (auto it = mAudioSessionRefs.begin(); it != mAudioSessionRefs.end();) {
+            AudioSessionRef* const ref = *it;
+            ALOGV("%s: pid %d", __func__, ref->mPid);
             if (ref->mPid == pid) {
                 ALOGV(" removing entry for pid %d session %d", pid, ref->mSessionid);
-                mAudioSessionRefs.removeAt(i);
                 delete ref;
                 removed = true;
-                num--;
+                it = mAudioSessionRefs.erase(it);
             } else {
-                i++;
+                ++it;
             }
         }
         if (removed) {
@@ -3317,9 +3314,12 @@ status_t AudioFlinger::closeOutput_nonvirtual(audio_io_handle_t output)
                     // audioflinger lock is held so order of thread lock acquisition doesn't matter
                     // Use scoped_lock to avoid deadlock order issues with duplicating threads.
                     audio_utils::scoped_lock sl(dstThread->mutex(), playbackThread->mutex());
-                    Vector<sp<IAfEffectChain>> effectChains = playbackThread->getEffectChains_l();
-                    for (size_t i = 0; i < effectChains.size(); i ++) {
-                        moveEffectChain_ll(effectChains[i]->sessionId(), playbackThread.get(),
+
+                    // do not use a reference as we will be changing the thread's effect chains.
+                    std::vector<sp<IAfEffectChain>> effectChains =
+                            playbackThread->getEffectChains_l();
+                    for (const auto& ec : effectChains) {
+                        moveEffectChain_ll(ec->sessionId(), playbackThread.get(),
                                 dstThread.get());
                     }
                 }
@@ -3550,9 +3550,10 @@ status_t AudioFlinger::closeInput_nonvirtual(audio_io_handle_t input)
             sp<IAfEffectChain> chain;
             {
                 audio_utils::lock_guard _sl(recordThread->mutex());
-                const Vector<sp<IAfEffectChain>> effectChains = recordThread->getEffectChains_l();
+                const std::vector<sp<IAfEffectChain>>& effectChains =
+                        recordThread->getEffectChains_l();
                 // Note: maximum one chain per record thread
-                if (effectChains.size() != 0) {
+                if (!effectChains.empty()) {
                     chain = effectChains[0];
                 }
             }
@@ -3677,16 +3678,14 @@ void AudioFlinger::acquireAudioSessionId(
         }
     }
 
-    size_t num = mAudioSessionRefs.size();
-    for (size_t i = 0; i < num; i++) {
-        AudioSessionRef *ref = mAudioSessionRefs.editItemAt(i);
+    for (auto* const ref : mAudioSessionRefs) {
         if (ref->mSessionid == audioSession && ref->mPid == caller) {
             ref->mCnt++;
             ALOGV(" incremented refcount to %d", ref->mCnt);
             return;
         }
     }
-    mAudioSessionRefs.push(new AudioSessionRef(audioSession, caller, uid));
+    mAudioSessionRefs.push_back(new AudioSessionRef(audioSession, caller, uid));
     ALOGV(" added new entry for %d", audioSession);
 }
 
@@ -3701,14 +3700,13 @@ void AudioFlinger::releaseAudioSessionId(audio_session_t audioSession, pid_t pid
         if (pid != (pid_t)-1 && isAudioServerOrMediaServerUid(callerUid)) {
             caller = pid;  // check must match acquireAudioSessionId()
         }
-        size_t num = mAudioSessionRefs.size();
-        for (size_t i = 0; i < num; i++) {
-            AudioSessionRef *ref = mAudioSessionRefs.itemAt(i);
+        for (auto it = mAudioSessionRefs.begin(); it != mAudioSessionRefs.end();) {
+            AudioSessionRef* const ref = *it;
             if (ref->mSessionid == audioSession && ref->mPid == caller) {
                 ref->mCnt--;
                 ALOGV(" decremented refcount to %d", ref->mCnt);
                 if (ref->mCnt == 0) {
-                    mAudioSessionRefs.removeAt(i);
+                    (void) mAudioSessionRefs.erase(it); // ignore update as we exit loop.
                     delete ref;
                     std::vector<sp<IAfEffectModule>> effects = purgeStaleEffects_l();
                     removedEffects.insert(removedEffects.end(), effects.begin(), effects.end());
@@ -3730,9 +3728,7 @@ Exit:
 
 bool AudioFlinger::isSessionAcquired_l(audio_session_t audioSession)
 {
-    size_t num = mAudioSessionRefs.size();
-    for (size_t i = 0; i < num; i++) {
-        AudioSessionRef *ref = mAudioSessionRefs.itemAt(i);
+    for (const auto* ref : mAudioSessionRefs) {
         if (ref->mSessionid == audioSession) {
             return true;
         }
@@ -3744,50 +3740,43 @@ std::vector<sp<IAfEffectModule>> AudioFlinger::purgeStaleEffects_l() {
 
     ALOGV("purging stale effects");
 
-    Vector<sp<IAfEffectChain>> chains;
-    std::vector< sp<IAfEffectModule> > removedEffects;
+    std::vector<sp<IAfEffectChain>> chains;
 
     for (const auto& [_, t] : mPlaybackThreads) {
         audio_utils::lock_guard _l(t->mutex());
-        const Vector<sp<IAfEffectChain>> threadChains = t->getEffectChains_l();
-        for (size_t j = 0; j < threadChains.size(); j++) {
-            sp<IAfEffectChain> ec = threadChains[j];
+        const std::vector<sp<IAfEffectChain>>& threadChains = t->getEffectChains_l();
+        for (const auto& ec : threadChains) {
             if (!audio_is_global_session(ec->sessionId())) {
-                chains.push(ec);
+                chains.push_back(ec);
             }
         }
     }
 
     for (const auto& [_, t] : mRecordThreads) {
         audio_utils::lock_guard _l(t->mutex());
-        const Vector<sp<IAfEffectChain>> threadChains = t->getEffectChains_l();
-        for (size_t j = 0; j < threadChains.size(); j++) {
-            sp<IAfEffectChain> ec = threadChains[j];
-            chains.push(ec);
+        const std::vector<sp<IAfEffectChain>>& threadChains = t->getEffectChains_l();
+        for (const auto& ec : threadChains) {
+            chains.push_back(ec);
         }
     }
 
     for (const auto& [_, t] : mMmapThreads) {
         audio_utils::lock_guard _l(t->mutex());
-        const Vector<sp<IAfEffectChain>> threadChains = t->getEffectChains_l();
-        for (size_t j = 0; j < threadChains.size(); j++) {
-            sp<IAfEffectChain> ec = threadChains[j];
-            chains.push(ec);
+        const std::vector<sp<IAfEffectChain>>& threadChains = t->getEffectChains_l();
+        for (const auto& ec : threadChains) {
+            chains.push_back(ec);
         }
     }
 
-    for (size_t i = 0; i < chains.size(); i++) {
-         // clang-tidy suggests const ref
-        sp<IAfEffectChain> ec = chains[i];  // NOLINT(performance-unnecessary-copy-initialization)
+    std::vector<sp<IAfEffectModule>> removedEffects;
+    for (const auto& ec : chains) {
         int sessionid = ec->sessionId();
         const auto t = ec->thread().promote();
         if (t == 0) {
             continue;
         }
-        size_t numsessionrefs = mAudioSessionRefs.size();
         bool found = false;
-        for (size_t k = 0; k < numsessionrefs; k++) {
-            AudioSessionRef *ref = mAudioSessionRefs.itemAt(k);
+        for (const auto* ref : mAudioSessionRefs) {
             if (ref->mSessionid == sessionid) {
                 ALOGV(" session %d still exists for %d with %d refs",
                     sessionid, ref->mPid, ref->mCnt);
@@ -3821,10 +3810,8 @@ std::vector< sp<IAfEffectModule> > AudioFlinger::purgeOrphanEffectChains_l()
                 || session == AUDIO_SESSION_OUTPUT_STAGE) {
             continue;
         }
-        size_t numSessionRefs = mAudioSessionRefs.size();
         bool found = false;
-        for (size_t k = 0; k < numSessionRefs; k++) {
-            AudioSessionRef *ref = mAudioSessionRefs.itemAt(k);
+        for (const auto* ref : mAudioSessionRefs) {
             if (ref->mSessionid == session) {
                 ALOGV(" session %d still exists for %d with %d refs", session, ref->mPid,
                         ref->mCnt);
@@ -4944,10 +4931,10 @@ status_t AudioFlinger::moveEffectChain_ll(audio_session_t sessionId,
 {
     sp<IAfEffectChain> chain = nullptr;
     if (srcThread != 0) {
-        const Vector<sp<IAfEffectChain>> effectChains = srcThread->getEffectChains_l();
-        for (size_t i = 0; i < effectChains.size(); i ++) {
-             if (effectChains[i]->sessionId() == sessionId) {
-                 chain = effectChains[i];
+        const std::vector<sp<IAfEffectChain>>& effectChains = srcThread->getEffectChains_l();
+        for (const auto& ec : effectChains) {
+             if (ec->sessionId() == sessionId) {
+                 chain = ec;
                  break;
              }
         }

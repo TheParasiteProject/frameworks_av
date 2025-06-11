@@ -189,10 +189,6 @@ public:
             audio_port_handle_t portId = AUDIO_PORT_HANDLE_NONE)
             REQUIRES(mutex()) = 0;
 
-    // sendConfigEvent_l() must be called with ThreadBase::mLock held
-    // Can temporarily release the lock if waiting for a reply from
-    // processConfigEvents_l().
-    // status_t sendConfigEvent_l(sp<ConfigEvent>& event);
     virtual void sendIoConfigEvent(
             audio_io_config_event_t event, pid_t pid = 0,
             audio_port_handle_t portId = AUDIO_PORT_HANDLE_NONE) EXCLUDES_ThreadBase_Mutex = 0;
@@ -292,13 +288,13 @@ public:
     // ThreadBase mutex before processing the mixer and effects. This guarantees the
     // integrity of the chains during the process.
     // Also sets the parameter 'effectChains' to current value of mEffectChains.
-    virtual void lockEffectChains_l(Vector<sp<IAfEffectChain>>& effectChains)
+    virtual void lockEffectChains_l(std::vector<sp<IAfEffectChain>>& effectChains)
             REQUIRES(mutex()) EXCLUDES_EffectChain_Mutex = 0;
     // unlock effect chains after process
-    virtual void unlockEffectChains(const Vector<sp<IAfEffectChain>>& effectChains)
+    virtual void unlockEffectChains(const std::vector<sp<IAfEffectChain>>& effectChains)
             EXCLUDES_ThreadBase_Mutex = 0;
     // get a copy of mEffectChains vector
-    virtual Vector<sp<IAfEffectChain>> getEffectChains_l() const
+    virtual const std::vector<sp<IAfEffectChain>>& getEffectChains_l() const
             REQUIRES(mutex()) = 0;
     // set audio mode to all effect chains
     virtual void setMode(audio_mode_t mode)

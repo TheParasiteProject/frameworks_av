@@ -2441,7 +2441,7 @@ ssize_t OutputTrack::write(void* data, uint32_t frames)
     while (waitTimeLeftMs) {
         // First write pending buffers, then new data
         if (mBufferQueue.size()) {
-            pInBuffer = mBufferQueue.itemAt(0);
+            pInBuffer = mBufferQueue.front();
         } else {
             pInBuffer = &inBuffer;
         }
@@ -2487,7 +2487,7 @@ ssize_t OutputTrack::write(void* data, uint32_t frames)
 
         if (pInBuffer->frameCount == 0) {
             if (mBufferQueue.size()) {
-                mBufferQueue.removeAt(0);
+                mBufferQueue.pop_front();
                 free(pInBuffer->mBuffer);
                 if (pInBuffer != &inBuffer) {
                     delete pInBuffer;
@@ -2511,7 +2511,7 @@ ssize_t OutputTrack::write(void* data, uint32_t frames)
 
     // Calling write() with a 0 length buffer means that no more data will be written:
     // We rely on stop() to set the appropriate flags to allow the remaining frames to play out.
-    if (frames == 0 && mBufferQueue.size() == 0 && mActive) {
+    if (frames == 0 && mBufferQueue.empty() && mActive) {
         stop();
     }
 
@@ -2529,7 +2529,7 @@ void OutputTrack::queueBuffer(Buffer& inBuffer) {
         pInBuffer->frameCount = inBuffer.frameCount;
         pInBuffer->raw = pInBuffer->mBuffer;
         memcpy(pInBuffer->raw, inBuffer.raw, inBuffer.frameCount * mFrameSize);
-        mBufferQueue.add(pInBuffer);
+        mBufferQueue.push_back(pInBuffer);
         ALOGV("%s(%d): thread %d adding overflow buffer %zu", __func__, mId,
                 (int)mThreadIoHandle, mBufferQueue.size());
         // audio data is consumed (stored locally); set frameCount to 0.
@@ -2572,12 +2572,9 @@ status_t OutputTrack::obtainBuffer(
 
 void OutputTrack::clearBufferQueue()
 {
-    size_t size = mBufferQueue.size();
-
-    for (size_t i = 0; i < size; i++) {
-        Buffer *pBuffer = mBufferQueue.itemAt(i);
-        free(pBuffer->mBuffer);
-        delete pBuffer;
+    for (auto* buffer : mBufferQueue) {
+        free(buffer->mBuffer);
+        delete buffer;
     }
     mBufferQueue.clear();
 }

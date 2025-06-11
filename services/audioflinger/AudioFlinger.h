@@ -463,16 +463,6 @@ public:
     }
 
 private:
-    // FIXME The 400 is temporarily too high until a leak of writers in media.log is fixed.
-    static const size_t kLogMemorySize = 400 * 1024;
-    sp<MemoryDealer>    mLogMemoryDealer;   // == 0 when NBLog is disabled
-    // When a log writer is unregistered, it is done lazily so that media.log can continue to see it
-    // for as long as possible.  The memory is only freed when it is needed for another log writer.
-    Vector< sp<NBLog::Writer> > mUnregisteredWriters;
-    audio_utils::mutex& unregisteredWritersMutex() const { return mUnregisteredWritersMutex; }
-    mutable audio_utils::mutex mUnregisteredWritersMutex{
-            audio_utils::MutexOrder::kAudioFlinger_UnregisteredWritersMutex};
-
                             AudioFlinger() ANDROID_API;
     ~AudioFlinger() override;
 
@@ -703,7 +693,7 @@ private:
     std::atomic<audio_mode_t> mMode = AUDIO_MODE_INVALID;
     std::atomic<bool> mBtNrecIsOff = false;
 
-    Vector<AudioSessionRef*> mAudioSessionRefs GUARDED_BY(mutex());
+    std::vector<AudioSessionRef*> mAudioSessionRefs GUARDED_BY(mutex());
 
     AudioHwDevice* loadHwModule_ll(const char *name) REQUIRES(mutex(), hardwareMutex());
 
