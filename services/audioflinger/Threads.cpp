@@ -1451,21 +1451,31 @@ NO_THREAD_SAFETY_ANALYSIS  // manual locking
 }
 
 // checkEffectCompatibility_l() must be called with ThreadBase::mutex() held
-status_t RecordThread::checkEffectCompatibility_l(
+status_t ThreadBase::checkEffectCompatibility_l(
         const effect_descriptor_t *desc, audio_session_t sessionId)
 {
-    // No global output effect sessions on record threads
-    if (sessionId == AUDIO_SESSION_OUTPUT_MIX
+    if (isOutput()) {
+        // no preprocessing on playback threads
+        if ((desc->flags & EFFECT_FLAG_TYPE_MASK) == EFFECT_FLAG_TYPE_PRE_PROC) {
+            ALOGW("%s: pre processing effect %s created on playback thread %s",
+                __func__, desc->name, mThreadName);
+            return BAD_VALUE;
+        }
+    } else {
+        // No global output effect sessions on record threads
+        if (sessionId == AUDIO_SESSION_OUTPUT_MIX
             || sessionId == AUDIO_SESSION_OUTPUT_STAGE) {
-        ALOGW("checkEffectCompatibility_l(): global effect %s on record thread %s",
-                desc->name, mThreadName);
-        return BAD_VALUE;
-    }
-    // only pre processing effects on record thread
-    if ((desc->flags & EFFECT_FLAG_TYPE_MASK) != EFFECT_FLAG_TYPE_PRE_PROC) {
-        ALOGW("checkEffectCompatibility_l(): non pre processing effect %s on record thread %s",
-                desc->name, mThreadName);
-        return BAD_VALUE;
+            ALOGW("%s: global effect (session %d) %s on record thread %s",
+                  __func__, sessionId, desc->name, mThreadName);
+            return BAD_VALUE;
+        }
+
+        // only preprocessing effects on record threads for now.
+        if ((desc->flags & EFFECT_FLAG_TYPE_MASK) != EFFECT_FLAG_TYPE_PRE_PROC) {
+            ALOGW("%s: non pre processing effect %s on record thread %s",
+                  __func__, desc->name, mThreadName);
+            return BAD_VALUE;
+        }
     }
 
     // always allow effects without processing load or latency
@@ -1473,43 +1483,7 @@ status_t RecordThread::checkEffectCompatibility_l(
         return NO_ERROR;
     }
 
-    audio_input_flags_t flags = mInput->flags;
-    if (hasFastCapture() || (flags & AUDIO_INPUT_FLAG_FAST)) {
-        if (flags & AUDIO_INPUT_FLAG_RAW) {
-            ALOGW("checkEffectCompatibility_l(): effect %s on record thread %s in raw mode",
-                  desc->name, mThreadName);
-            return BAD_VALUE;
-        }
-        if ((desc->flags & EFFECT_FLAG_HW_ACC_TUNNEL) == 0) {
-            ALOGW("checkEffectCompatibility_l(): non HW effect %s on record thread %s in fast mode",
-                  desc->name, mThreadName);
-            return BAD_VALUE;
-        }
-    }
-
-    if (IAfEffectModule::isHapticGenerator(&desc->type)) {
-        ALOGE("%s(): HapticGenerator is not supported in RecordThread", __func__);
-        return BAD_VALUE;
-    }
-    return NO_ERROR;
-}
-
-// checkEffectCompatibility_l() must be called with ThreadBase::mutex() held
-status_t PlaybackThread::checkEffectCompatibility_l(
-        const effect_descriptor_t *desc, audio_session_t sessionId)
-{
-    // no preprocessing on playback threads
-    if ((desc->flags & EFFECT_FLAG_TYPE_MASK) == EFFECT_FLAG_TYPE_PRE_PROC) {
-        ALOGW("%s: pre processing effect %s created on playback"
-                " thread %s", __func__, desc->name, mThreadName);
-        return BAD_VALUE;
-    }
-
-    // always allow effects without processing load or latency
-    if ((desc->flags & EFFECT_FLAG_NO_PROCESS_MASK) == EFFECT_FLAG_NO_PROCESS) {
-        return NO_ERROR;
-    }
-
+    // Note mHapticChannelCount == 0 for Record threads.
     if (IAfEffectModule::isHapticGenerator(&desc->type) && mHapticChannelCount == 0) {
         ALOGW("%s: thread (%s) doesn't support haptic playback while the effect is HapticGenerator",
               __func__, threadTypeToString(mType));
@@ -1518,8 +1492,8 @@ status_t PlaybackThread::checkEffectCompatibility_l(
 
     if (IAfEffectModule::isSpatializer(&desc->type)
             && mType != SPATIALIZER) {
-        ALOGW("%s: attempt to create a spatializer effect on a thread of type %d",
-                __func__, mType);
+        ALOGW("%s: attempt to create a spatializer effect on a thread %s",
+                __func__, threadTypeToString(mType));
         return BAD_VALUE;
     }
 
@@ -1639,6 +1613,23 @@ status_t PlaybackThread::checkEffectCompatibility_l(
             ALOGW("%s: effect %s not supported as there is a bit-perfect track with session as %d",
                   __func__, desc->name, sessionId);
             return BAD_VALUE;
+        }
+        break;
+    case DIRECT_RECORD:
+    case RECORD: {
+            const audio_input_flags_t flags = mInput->flags;
+            if (hasFastCapture() || (flags & AUDIO_INPUT_FLAG_FAST)) {
+                if (flags & AUDIO_INPUT_FLAG_RAW) {
+                    ALOGW("%s: effect %s on record thread %s in raw mode",
+                          __func__, desc->name, mThreadName);
+                    return BAD_VALUE;
+                }
+                if ((desc->flags & EFFECT_FLAG_HW_ACC_TUNNEL) == 0) {
+                    ALOGW("%s: non HW effect %s on record thread %s in fast mode",
+                          __func__, desc->name, mThreadName);
+                    return BAD_VALUE;
+                }
+            }
         }
         break;
     default:

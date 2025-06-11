@@ -438,6 +438,9 @@ public:
     virtual AudioStreamIn* clearInput_l() REQUIRES(mutex()) = 0;
     virtual AudioStreamIn* clearInput() EXCLUDES_ThreadBase_Mutex = 0;
 
+    virtual bool hasFastMixer() const = 0;
+    virtual bool hasFastCapture() const = 0;
+
     // we use "asVolumeInterface" as the Thread has an isa relationship with VolumeInterface.
     virtual sp<VolumeInterface> asVolumeInterface() { return nullptr; }
 
@@ -565,7 +568,6 @@ public:
     virtual void setStandby_l() REQUIRES(mutex()) = 0;
     virtual bool waitForHalStart() EXCLUDES_ThreadBase_Mutex = 0;
 
-    virtual bool hasFastMixer() const = 0;
     virtual FastTrackUnderruns getFastTrackUnderruns(size_t fastIndex) const = 0;
     virtual const std::atomic<int64_t>& framesWritten() const = 0;
 
@@ -643,7 +645,6 @@ public:
 
     virtual void setRecordSilenced(audio_port_handle_t portId, bool silenced)
             EXCLUDES_ThreadBase_Mutex = 0;
-    virtual bool hasFastCapture() const = 0;
 
     virtual void checkBtNrec() EXCLUDES_ThreadBase_Mutex = 0;
     virtual uint32_t getInputFramesLost() const EXCLUDES_ThreadBase_Mutex = 0;
