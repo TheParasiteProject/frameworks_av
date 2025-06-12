@@ -229,6 +229,13 @@ flag {
     bug: "400434060"
 }
 
+flag{
+    name: "ringtone_vibration_utils_api"
+    namespace: "media_audio"
+    description: "System APIs for ringtone vibration utils."
+    bug: "399265235"
+}
+
 flag {
     name: "sco_managed_by_audio"
     is_exported: true
