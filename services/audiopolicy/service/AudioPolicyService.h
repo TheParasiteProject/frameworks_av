@@ -379,12 +379,6 @@ public:
                                const char *keyValuePairs,
                                int delayMs);
 
-    virtual status_t setStreamVolume(audio_stream_type_t stream,
-                                     float volume,
-                                     bool muted,
-                                     audio_io_handle_t output,
-                                     int delayMs = 0);
-
     /**
      * Set a volume on AudioTrack port id(s) for a particular output.
      * For the same user setting, a volume group (and associated given port of the
@@ -624,7 +618,6 @@ private:
 
         // commands for tone AudioCommand
         enum {
-            SET_VOLUME,
             SET_PORTS_VOLUME,
             SET_PARAMETERS,
             SET_VOICE_VOLUME,
@@ -657,8 +650,7 @@ private:
         virtual     bool        threadLoop();
 
                     void        exit();
-                    status_t    volumeCommand(audio_stream_type_t stream, float volume, bool muted,
-                                            audio_io_handle_t output, int delayMs = 0);
+
                     status_t    volumePortsCommand(const std::vector<audio_port_handle_t> &ports,
                             float volume, bool muted, audio_io_handle_t output, int delayMs = 0);
                     status_t    parametersCommand(audio_io_handle_t ioHandle,
@@ -891,10 +883,6 @@ private:
         // misc control functions
         //
 
-        // set a stream volume for a particular output. For the same user setting, a given stream
-        // type can have different volumes for each output (destination device) it is attached to.
-        virtual status_t setStreamVolume(audio_stream_type_t stream, float volume, bool muted,
-                audio_io_handle_t output, int delayMs = 0);
         /**
          * Set a volume on port(s) for a particular output. For the same user setting, a volume
          * group (and associated given port of the client's track) can have different volumes for

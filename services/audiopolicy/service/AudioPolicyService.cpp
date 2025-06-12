@@ -1839,17 +1839,6 @@ bool AudioPolicyService::AudioCommandThread::threadLoop()
                 status_t createAudioPatchStatus;
 
                 switch (command->mCommand) {
-                case SET_VOLUME: {
-                    VolumeData *data = (VolumeData *)command->mParam.get();
-                    ALOGV("AudioCommandThread() processing set volume stream %d, \
-                            volume %f, output %d", data->mStream, data->mVolume, data->mIO);
-                    ul.unlock();
-                    command->mStatus = AudioSystem::setStreamVolume(data->mStream,
-                                                                    data->mVolume,
-                                                                    data->mIsMuted,
-                                                                    data->mIO);
-                    ul.lock();
-                    }break;
                 case SET_PORTS_VOLUME: {
                     VolumePortsData *data = (VolumePortsData *)command->mParam.get();
                     ALOGV("AudioCommandThread() processing set volume Ports %s volume %f, \
@@ -2174,26 +2163,6 @@ NO_THREAD_SAFETY_ANALYSIS  // trylock
     dumpReleaseLock(mMutex, locked);
 
     return NO_ERROR;
-}
-
-status_t AudioPolicyService::AudioCommandThread::volumeCommand(audio_stream_type_t stream,
-                                                               float volume,
-                                                               bool muted,
-                                                               audio_io_handle_t output,
-                                                               int delayMs)
-{
-    sp<AudioCommand> command = new AudioCommand();
-    command->mCommand = SET_VOLUME;
-    sp<VolumeData> data = new VolumeData();
-    data->mStream = stream;
-    data->mVolume = volume;
-    data->mIsMuted = muted;
-    data->mIO = output;
-    command->mParam = data;
-    command->mWaitStatus = true;
-    ALOGV("AudioCommandThread() adding set volume stream %d, volume %f, output %d",
-            stream, volume, output);
-    return sendCommand(command, delayMs);
 }
 
 status_t AudioPolicyService::AudioCommandThread::volumePortsCommand(
@@ -2532,20 +2501,6 @@ void AudioPolicyService::AudioCommandThread::insertCommand_l(sp<AudioCommand>& c
             delayMs = 1;
         } break;
 
-        case SET_VOLUME: {
-            VolumeData *data = (VolumeData *)command->mParam.get();
-            VolumeData *data2 = (VolumeData *)command2->mParam.get();
-            if (data->mIO != data2->mIO) break;
-            if (data->mStream != data2->mStream) break;
-            ALOGV("Filtering out volume command on output %d for stream %d",
-                    data->mIO, data->mStream);
-            removedCommands.add(command2);
-            command->mTime = command2->mTime;
-            // force delayMs to non 0 so that code below does not request to wait for
-            // command status as the command is now delayed
-            delayMs = 1;
-        } break;
-
         case SET_PORTS_VOLUME: {
             VolumePortsData *data = (VolumePortsData *)command->mParam.get();
             VolumePortsData *data2 = (VolumePortsData *)command2->mParam.get();
@@ -2707,16 +2662,6 @@ void AudioPolicyService::setParameters(audio_io_handle_t ioHandle,
 {
     mAudioCommandThread->parametersCommand(ioHandle, keyValuePairs,
                                            delayMs);
-}
-
-int AudioPolicyService::setStreamVolume(audio_stream_type_t stream,
-                                        float volume,
-                                        bool muted,
-                                        audio_io_handle_t output,
-                                        int delayMs)
-{
-    return (int)mAudioCommandThread->volumeCommand(stream, volume, muted,
-                                                   output, delayMs);
 }
 
 int AudioPolicyService::setPortsVolume(const std::vector<audio_port_handle_t> &ports, float volume,

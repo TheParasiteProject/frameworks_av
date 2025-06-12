@@ -1153,10 +1153,6 @@ public:
     void setMasterVolume(float value) final;
     void setMasterBalance(float balance) override EXCLUDES_ThreadBase_Mutex;
     void setMasterMute(bool muted) final;
-    void setStreamVolume(audio_stream_type_t stream, float value, bool muted) final
-            EXCLUDES_ThreadBase_Mutex;
-    void setStreamMute(audio_stream_type_t stream, bool muted) final EXCLUDES_ThreadBase_Mutex;
-    float streamVolume(audio_stream_type_t stream) const final EXCLUDES_ThreadBase_Mutex;
 
     void setVolumeForOutput_l(float left, float right) const final;
 
@@ -2461,11 +2457,6 @@ public:
     void setMasterBalance(float /* value */) final EXCLUDES_ThreadBase_Mutex {}
     void setMasterMute(bool muted) final EXCLUDES_ThreadBase_Mutex;
 
-    void setStreamVolume(audio_stream_type_t stream, float value, bool muted) final
-            EXCLUDES_ThreadBase_Mutex;
-    void setStreamMute(audio_stream_type_t stream, bool muted) final EXCLUDES_ThreadBase_Mutex;
-    float streamVolume(audio_stream_type_t stream) const final EXCLUDES_ThreadBase_Mutex;
-
     void setMasterMute_l(bool muted) REQUIRES(mutex()) { mMasterMute = muted; }
 
     audio_stream_type_t streamType_l() const final REQUIRES(mutex()) {
@@ -2497,12 +2488,6 @@ public:
 
 protected:
     void dumpInternals_l(int fd, const Vector<String16>& args) final REQUIRES(mutex());
-    float streamVolume_l() const REQUIRES(mutex()) {
-                    return mStreamTypes[mStreamType].volume;
-                }
-    bool streamMuted_l() const REQUIRES(mutex()) {
-                    return mStreamTypes[mStreamType].mute;
-                }
 
     stream_type_t mStreamTypes[AUDIO_STREAM_CNT] GUARDED_BY(mutex());
     audio_stream_type_t mStreamType GUARDED_BY(mutex());

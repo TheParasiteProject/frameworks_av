@@ -4228,14 +4228,6 @@ namespace {
 
 class AudioPolicyManagerTestClientVolumeChecker : public AudioPolicyManagerTestClient {
 public:
-    status_t setStreamVolume(audio_stream_type_t stream,
-                             float volume,
-                             bool /*muted*/,
-                             audio_io_handle_t /*output*/,
-                             int /*delayMs*/) override {
-        mLastStreamVolume[stream] = volume;
-        return NO_ERROR;
-    }
 
     status_t setPortsVolume(const std::vector<audio_port_handle_t>& ports, float volume,
                             bool /*muted*/, audio_io_handle_t /*output*/,
@@ -4255,17 +4247,12 @@ public:
         return mLastPortVolume[port];
     }
 
-    float getLastStreamVolume(audio_stream_type_t stream) {
-        return mLastStreamVolume[stream];
-    }
-
     float getLastVoiceVolume() const {
         return mLastVoiceVolume;
     }
 
 private:
     std::unordered_map<audio_port_handle_t, float> mLastPortVolume;
-    std::unordered_map<audio_stream_type_t, float> mLastStreamVolume;
     float mLastVoiceVolume;
 };
 

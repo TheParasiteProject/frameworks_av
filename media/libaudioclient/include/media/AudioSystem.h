@@ -126,13 +126,6 @@ public:
     static status_t setMasterMute(bool mute);
     static status_t getMasterMute(bool* mute);
 
-    // set stream volume on specified output
-    static status_t setStreamVolume(audio_stream_type_t stream, float value,
-                                    bool muted, audio_io_handle_t output);
-
-    // mute/unmute stream
-    static status_t setStreamMute(audio_stream_type_t stream, bool mute);
-
     /**
      * Set volume for given AudioTrack port ids on specified output
      * @param portIds to consider

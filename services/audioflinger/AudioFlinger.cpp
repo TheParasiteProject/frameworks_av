@@ -183,8 +183,6 @@ BINDER_METHOD_ENTRY(setMasterVolume) \
 BINDER_METHOD_ENTRY(setMasterMute) \
 BINDER_METHOD_ENTRY(masterVolume) \
 BINDER_METHOD_ENTRY(masterMute) \
-BINDER_METHOD_ENTRY(setStreamVolume) \
-BINDER_METHOD_ENTRY(setStreamMute) \
 BINDER_METHOD_ENTRY(setPortsVolume) \
 BINDER_METHOD_ENTRY(setMode) \
 BINDER_METHOD_ENTRY(setMicMute) \
@@ -1647,38 +1645,6 @@ status_t AudioFlinger::checkStreamType(audio_stream_type_t stream)
     return NO_ERROR;
 }
 
-status_t AudioFlinger::setStreamVolume(audio_stream_type_t stream, float value,
-        bool muted, audio_io_handle_t output)
-{
-    // check calling permissions
-    if (audioserver_permissions()) {
-        VALUE_OR_RETURN_CONVERTED(enforceCallingPermission(MODIFY_AUDIO_SETTINGS));
-    } else {
-        if (!settingsAllowed()) {
-            return PERMISSION_DENIED;
-        }
-    }
-
-    status_t status = checkStreamType(stream);
-    if (status != NO_ERROR) {
-        return status;
-    }
-    if (output == AUDIO_IO_HANDLE_NONE) {
-        return BAD_VALUE;
-    }
-    LOG_ALWAYS_FATAL_IF(stream == AUDIO_STREAM_PATCH && value != 1.0f,
-                        "AUDIO_STREAM_PATCH must have full scale volume");
-
-    audio_utils::lock_guard lock(mutex());
-    sp<VolumeInterface> volumeInterface = getVolumeInterface_l(output);
-    if (volumeInterface == NULL) {
-        return BAD_VALUE;
-    }
-    volumeInterface->setStreamVolume(stream, value, muted);
-
-    return NO_ERROR;
-}
-
 status_t AudioFlinger::setPortsVolume(
         const std::vector<audio_port_handle_t> &ports, float volume, bool muted,
         audio_io_handle_t output) {
@@ -1783,38 +1749,6 @@ status_t AudioFlinger::getSoundDoseInterface(const sp<media::ISoundDoseCallback>
     }
 
     *soundDose = mMelReporter->getSoundDoseInterface(callback);
-    return NO_ERROR;
-}
-
-status_t AudioFlinger::setStreamMute(audio_stream_type_t stream, bool muted)
-{
-    // check calling permissions
-    if (audioserver_permissions()) {
-        VALUE_OR_RETURN_CONVERTED(enforceCallingPermission(MODIFY_AUDIO_SETTINGS));
-    } else {
-        if (!settingsAllowed()) {
-            return PERMISSION_DENIED;
-        }
-    }
-
-    status_t status = checkStreamType(stream);
-    if (status != NO_ERROR) {
-        return status;
-    }
-    ALOG_ASSERT(stream != AUDIO_STREAM_PATCH, "attempt to mute AUDIO_STREAM_PATCH");
-
-    if (uint32_t(stream) == AUDIO_STREAM_ENFORCED_AUDIBLE) {
-        ALOGE("setStreamMute() invalid stream %d", stream);
-        return BAD_VALUE;
-    }
-
-    audio_utils::lock_guard lock(mutex());
-    mStreamTypes[stream].mute = muted;
-    std::vector<sp<VolumeInterface>> volumeInterfaces = getAllVolumeInterfaces_l();
-    for (size_t i = 0; i < volumeInterfaces.size(); i++) {
-        volumeInterfaces[i]->setStreamMute(stream, muted);
-    }
-
     return NO_ERROR;
 }
 
@@ -5196,8 +5130,6 @@ status_t AudioFlinger::onTransactWrapper(TransactionCode code,
                                          const std::function<status_t()>& delegate) {
     // make sure transactions reserved to AudioPolicyManager do not come from other processes
     switch (code) {
-        case TransactionCode::SET_STREAM_VOLUME:
-        case TransactionCode::SET_STREAM_MUTE:
         case TransactionCode::OPEN_OUTPUT:
         case TransactionCode::OPEN_DUPLICATE_OUTPUT:
         case TransactionCode::CLOSE_OUTPUT:
