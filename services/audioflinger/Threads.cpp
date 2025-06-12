@@ -967,7 +967,7 @@ void ThreadBase::processConfigEvents_l()
                 event->mCondition.notify_one();
             }
         }
-        ALOGV_IF(mConfigEvents.isEmpty(), "processConfigEvents_l() DONE thread %p", this);
+        ALOGV_IF(mConfigEvents.empty(), "processConfigEvents_l() DONE thread %p", this);
     }
 
     if (configChanged) {
