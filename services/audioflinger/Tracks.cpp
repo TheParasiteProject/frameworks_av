@@ -2341,7 +2341,8 @@ OutputTrack::OutputTrack(
               sampleRate, format, channelMask, frameCount,
               nullptr /* buffer */, (size_t)0 /* bufferSize */, nullptr /* sharedBuffer */,
               AUDIO_SESSION_NONE, getpid(), attributionSource, AUDIO_OUTPUT_FLAG_NONE,
-              TYPE_OUTPUT),
+              TYPE_OUTPUT, AUDIO_PORT_HANDLE_NONE,
+              /*frameCountToBeReady*/ playbackThread->frameCount()),
     mActive(false), mSourceThread(sourceThread)
 {
     if (mCblk != NULL) {
