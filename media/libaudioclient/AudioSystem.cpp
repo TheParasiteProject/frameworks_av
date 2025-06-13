@@ -387,23 +387,6 @@ status_t AudioSystem::getMasterMute(bool* mute) {
     return NO_ERROR;
 }
 
-status_t AudioSystem::setStreamVolume(audio_stream_type_t stream, float value,
-                                      bool muted, audio_io_handle_t output) {
-    if (uint32_t(stream) >= AUDIO_STREAM_CNT) return BAD_VALUE;
-    const sp<IAudioFlinger> af = get_audio_flinger();
-    if (af == nullptr) return AudioFlingerServiceTraits::getError();
-    af->setStreamVolume(stream, value, muted, output);
-    return NO_ERROR;
-}
-
-status_t AudioSystem::setStreamMute(audio_stream_type_t stream, bool mute) {
-    if (uint32_t(stream) >= AUDIO_STREAM_CNT) return BAD_VALUE;
-    const sp<IAudioFlinger> af = get_audio_flinger();
-    if (af == nullptr) return AudioFlingerServiceTraits::getError();
-    af->setStreamMute(stream, mute);
-    return NO_ERROR;
-}
-
 status_t AudioSystem::setPortsVolume(
         const std::vector<audio_port_handle_t>& portIds, float volume, bool muted,
         audio_io_handle_t output) {

@@ -2900,30 +2900,6 @@ void PlaybackThread::setMasterMute(bool muted)
     }
 }
 
-void PlaybackThread::setStreamVolume(audio_stream_type_t stream, float value, bool muted)
-{
-    ALOGV("%s: stream %d value %f muted %d", __func__, stream, value, muted);
-    audio_utils::lock_guard _l(mutex());
-    mStreamTypes[stream].volume = value;
-    if (com_android_media_audio_ring_my_car()) {
-        mStreamTypes[stream].mute = muted;
-    }
-    broadcast_l();
-}
-
-void PlaybackThread::setStreamMute(audio_stream_type_t stream, bool muted)
-{
-    audio_utils::lock_guard _l(mutex());
-    mStreamTypes[stream].mute = muted;
-    broadcast_l();
-}
-
-float PlaybackThread::streamVolume(audio_stream_type_t stream) const
-{
-    audio_utils::lock_guard _l(mutex());
-    return mStreamTypes[stream].volume;
-}
-
 void PlaybackThread::setVolumeForOutput_l(float left, float right) const
 {
     mOutput->stream->setVolume(left, right);
@@ -11149,34 +11125,6 @@ void MmapPlaybackThread::setMasterMute(bool muted)
         mMasterMute = false;
     } else {
         mMasterMute = muted;
-    }
-}
-
-void MmapPlaybackThread::setStreamVolume(audio_stream_type_t stream, float value, bool muted)
-{
-    ALOGV("%s: stream %d value %f muted %d", __func__, stream, value, muted);
-    audio_utils::lock_guard _l(mutex());
-    mStreamTypes[stream].volume = value;
-    if (com_android_media_audio_ring_my_car()) {
-        mStreamTypes[stream].mute = muted;
-    }
-    if (stream == mStreamType) {
-        broadcast_l();
-    }
-}
-
-float MmapPlaybackThread::streamVolume(audio_stream_type_t stream) const
-{
-    audio_utils::lock_guard _l(mutex());
-    return mStreamTypes[stream].volume;
-}
-
-void MmapPlaybackThread::setStreamMute(audio_stream_type_t stream, bool muted)
-{
-    audio_utils::lock_guard _l(mutex());
-    mStreamTypes[stream].mute = muted;
-    if (stream == mStreamType) {
-        broadcast_l();
     }
 }
 
