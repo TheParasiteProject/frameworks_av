@@ -367,9 +367,6 @@ private:
     bool masterMute_l() const final REQUIRES(mutex());
     float getMasterBalance_l() const REQUIRES(mutex());
     // no range check, AudioFlinger::mutex() held
-    bool streamMute_l(audio_stream_type_t stream) const final REQUIRES(mutex()) {
-        return mStreamTypes[stream].mute;
-    }
     audio_mode_t getMode() const final { return mMode; }
     bool isLowRamDevice() const final { return mIsLowRamDevice; }
     uint32_t getScreenState() const final { return mScreenState; }
@@ -672,7 +669,6 @@ private:
     mutable hardware_call_state mHardwareStatus = AUDIO_HW_IDLE;  // for dump only
     std::map<audio_io_handle_t, sp<IAfPlaybackThread>> mPlaybackThreads
             GUARDED_BY(mutex());
-    stream_type_t mStreamTypes[AUDIO_STREAM_CNT] GUARDED_BY(mutex());
 
     float mMasterVolume GUARDED_BY(mutex()) = 1.f;
     bool mMasterMute GUARDED_BY(mutex()) = false;
