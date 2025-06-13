@@ -1632,6 +1632,18 @@ status_t ThreadBase::checkEffectCompatibility_l(
             }
         }
         break;
+    case MMAP_CAPTURE:
+    case MMAP_PLAYBACK: {
+        // No global effect sessions on mmap threads (DEVICE, STAGE, or MIX).
+        if (audio_is_global_session(sessionId)) {
+            ALOGW("%s: no global effect (session %d) %s on MMAP thread %s",
+                    __func__, sessionId, desc->name, mThreadName);
+            return BAD_VALUE;
+        }
+
+        ALOGW("%s: cannot use effect %s on MMap thread %s", __func__, desc->name, mThreadName);
+        return BAD_VALUE;
+    }
     default:
         LOG_ALWAYS_FATAL("checkEffectCompatibility_l(): wrong thread type %d", mType);
     }
@@ -11012,40 +11024,6 @@ bool MmapThread::isValidSyncEvent(
         const sp<SyncEvent>& /* event */) const
 {
     return false;
-}
-
-status_t MmapThread::checkEffectCompatibility_l(
-        const effect_descriptor_t *desc, audio_session_t sessionId)
-{
-    // No global effect sessions on mmap threads
-    if (audio_is_global_session(sessionId)) {
-        ALOGW("checkEffectCompatibility_l(): global effect %s on MMAP thread %s",
-                desc->name, mThreadName);
-        return BAD_VALUE;
-    }
-
-    if (!isOutput() && ((desc->flags & EFFECT_FLAG_TYPE_MASK) != EFFECT_FLAG_TYPE_PRE_PROC)) {
-        ALOGW("checkEffectCompatibility_l(): non pre processing effect %s on capture mmap thread",
-                desc->name);
-        return BAD_VALUE;
-    }
-    if (isOutput() && ((desc->flags & EFFECT_FLAG_TYPE_MASK) == EFFECT_FLAG_TYPE_PRE_PROC)) {
-        ALOGW("checkEffectCompatibility_l(): pre processing effect %s created on playback mmap "
-              "thread", desc->name);
-        return BAD_VALUE;
-    }
-
-    // Only allow effects without processing load or latency
-    if ((desc->flags & EFFECT_FLAG_NO_PROCESS_MASK) != EFFECT_FLAG_NO_PROCESS) {
-        return BAD_VALUE;
-    }
-
-    if (IAfEffectModule::isHapticGenerator(&desc->type)) {
-        ALOGE("%s(): HapticGenerator is not supported for MmapThread", __func__);
-        return BAD_VALUE;
-    }
-
-    return NO_ERROR;
 }
 
 void MmapThread::checkInvalidTracks_l()

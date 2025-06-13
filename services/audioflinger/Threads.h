@@ -1036,7 +1036,7 @@ protected:
 
     status_t checkEffectCompatibility_l(
             const effect_descriptor_t* desc, audio_session_t sessionId)
-            override REQUIRES(mutex());
+            final REQUIRES(mutex());
 
     private:
     void dumpBase_l(int fd, const Vector<String16>& args) REQUIRES(mutex());
@@ -2366,8 +2366,6 @@ class MmapThread : public ThreadBase, public virtual IAfMmapThread
     sp<StreamHalInterface> stream() const final { return mHalStream; }
     status_t addEffectChain_l(const sp<IAfEffectChain>& chain) final REQUIRES(mutex());
     size_t removeEffectChain_l(const sp<IAfEffectChain>& chain) final REQUIRES(mutex());
-    status_t checkEffectCompatibility_l(
-            const effect_descriptor_t *desc, audio_session_t sessionId) final REQUIRES(mutex());
 
     uint32_t hasAudioSession_l(audio_session_t sessionId) const override REQUIRES(mutex()) {
                                 // Note: using mActiveTracks as no mTracks here.
