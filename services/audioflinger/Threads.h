@@ -1533,8 +1533,6 @@ protected:
 
     void collectTimestamps_l() REQUIRES(mutex(), ThreadBase_ThreadLoop);
 
-    stream_type_t                   mStreamTypes[AUDIO_STREAM_CNT];
-
     float                           mMasterVolume;
     std::atomic<float>              mMasterBalance{};
     audio_utils::Balance            mBalance;
@@ -2488,7 +2486,6 @@ public:
 protected:
     void dumpInternals_l(int fd, const Vector<String16>& args) final REQUIRES(mutex());
 
-    stream_type_t mStreamTypes[AUDIO_STREAM_CNT] GUARDED_BY(mutex());
     audio_stream_type_t mStreamType GUARDED_BY(mutex());
     float mMasterVolume GUARDED_BY(mutex());
     bool mMasterMute GUARDED_BY(mutex());

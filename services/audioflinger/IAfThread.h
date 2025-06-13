@@ -61,12 +61,6 @@ class IAfTrackBase;
 class Client;
 class MelReporter;
 
-// Used internally for Threads.cpp and AudioFlinger.cpp
-struct stream_type_t {
-    float volume = 1.f;
-    bool mute = false;
-};
-
 // Note this is exposed through IAfThreadBase::afThreadCallback()
 // and hence may be used by the Effect / Track framework.
 class IAfThreadCallback : public virtual RefBase {
@@ -82,8 +76,6 @@ public:
     virtual bool masterMute_l() const
             REQUIRES(mutex()) = 0;
     virtual float getMasterBalance_l() const
-            REQUIRES(mutex()) = 0;
-    virtual bool streamMute_l(audio_stream_type_t stream) const
             REQUIRES(mutex()) = 0;
     virtual audio_mode_t getMode() const = 0;
     virtual bool isLowRamDevice() const = 0;
