@@ -2263,7 +2263,6 @@ PlaybackThread::PlaybackThread(const sp<IAfThreadCallback>& afThreadCallback,
         mSuspended(0), mBytesWritten(0),
         mFramesWritten(0),
         mSuspendedFrames(0),
-        // mStreamTypes[] initialized in constructor body
         mNumWrites(0), mNumDelayedWrites(0), mInWrite(false),
         mMixerStatus(MIXER_IDLE),
         mMixerStatusIgnoringFastTracks(MIXER_IDLE),

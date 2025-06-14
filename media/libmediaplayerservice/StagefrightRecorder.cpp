@@ -2166,7 +2166,7 @@ status_t StagefrightRecorder::setupVideoEncoder(
     }
 
     if (cameraSource == NULL) {
-        mSurface = mediaflagtools::igbpToSurfaceType(encoder->getGraphicBufferProducer());
+        mSurface = encoder->getSurface();
     }
 
     *source = encoder;
