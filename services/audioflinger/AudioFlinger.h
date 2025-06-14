@@ -100,11 +100,6 @@ private:
     status_t setMasterBalance(float balance) final EXCLUDES_AudioFlinger_Mutex;
     status_t getMasterBalance(float* balance) const final EXCLUDES_AudioFlinger_Mutex;
 
-    status_t setStreamVolume(audio_stream_type_t stream, float value,
-            bool muted, audio_io_handle_t output) final EXCLUDES_AudioFlinger_Mutex;
-    status_t setStreamMute(audio_stream_type_t stream, bool muted) final
-            EXCLUDES_AudioFlinger_Mutex;
-
     status_t setPortsVolume(const std::vector<audio_port_handle_t>& portIds, float volume,
                             bool muted, audio_io_handle_t output) final EXCLUDES_AudioFlinger_Mutex;
 

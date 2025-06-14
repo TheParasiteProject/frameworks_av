@@ -606,11 +606,6 @@ public:
     // misc control functions
     //
 
-    // set a stream volume for a particular output. For the same user setting, a given stream type
-    // can have different volumes
-    // for each output (destination device) it is attached to.
-    virtual status_t setStreamVolume(audio_stream_type_t stream, float volume, bool muted,
-                                     audio_io_handle_t output, int delayMs = 0) = 0;
     /**
      * Set volume for given AudioTrack port ids for a particular output.
      * For the same user setting, a given volume group and associated output port id

@@ -1031,6 +1031,13 @@ protected:
         return isStreamInitialized_l();
     }
 
+    bool hasFastMixer() const override { return false; }
+    bool hasFastCapture() const override { return false; }
+
+    status_t checkEffectCompatibility_l(
+            const effect_descriptor_t* desc, audio_session_t sessionId)
+            final REQUIRES(mutex());
+
     private:
     void dumpBase_l(int fd, const Vector<String16>& args) REQUIRES(mutex());
     void dumpEffectChains_l(int fd, const Vector<String16>& args) REQUIRES(mutex());
@@ -1038,6 +1045,11 @@ protected:
 protected:
     AudioStreamIn* mInput = nullptr; // NO_THREAD_SAFETY_ANALYSIS
     AudioStreamOut* mOutput = nullptr; // NO_THREAD_SAFETY_ANALYSIS
+
+    // mHapticChannelMask and mHapticChannelCount will only be valid when the thread supports
+    // Haptic playback.
+    audio_channel_mask_t mHapticChannelMask = AUDIO_CHANNEL_NONE;
+    uint32_t mHapticChannelCount = 0;
 };
 
 // --- PlaybackThread ---
@@ -1074,9 +1086,6 @@ public:
 
     // RefBase
     void onFirstRef() override;
-
-    status_t checkEffectCompatibility_l(
-            const effect_descriptor_t* desc, audio_session_t sessionId) final REQUIRES(mutex());
 
     void addOutputTrack_l(const sp<IAfTrack>& track) final REQUIRES(mutex()) {
         mTracks.add(track);
@@ -1153,10 +1162,6 @@ public:
     void setMasterVolume(float value) final;
     void setMasterBalance(float balance) override EXCLUDES_ThreadBase_Mutex;
     void setMasterMute(bool muted) final;
-    void setStreamVolume(audio_stream_type_t stream, float value, bool muted) final
-            EXCLUDES_ThreadBase_Mutex;
-    void setStreamMute(audio_stream_type_t stream, bool muted) final EXCLUDES_ThreadBase_Mutex;
-    float streamVolume(audio_stream_type_t stream) const final EXCLUDES_ThreadBase_Mutex;
 
     void setVolumeForOutput_l(float left, float right) const final;
 
@@ -1455,11 +1460,6 @@ protected:
     int64_t                         mLastFramesWritten = -1; // track changes in timestamp
                                                              // server frames written.
     int64_t                         mSuspendedFrames; // not reset on standby
-
-    // mHapticChannelMask and mHapticChannelCount will only be valid when the thread support
-    // haptic playback.
-    audio_channel_mask_t            mHapticChannelMask = AUDIO_CHANNEL_NONE;
-    uint32_t                        mHapticChannelCount = 0;
 
     audio_channel_mask_t            mMixerChannelMask = AUDIO_CHANNEL_NONE;
 
@@ -2148,9 +2148,6 @@ public:
     bool hasFastCapture() const final { return mFastCapture != 0; }
     virtual void        toAudioPortConfig(struct audio_port_config *config);
 
-    virtual status_t checkEffectCompatibility_l(const effect_descriptor_t *desc,
-            audio_session_t sessionId) REQUIRES(mutex());
-
     virtual void acquireWakeLock_l() REQUIRES(mutex()) {
                             ThreadBase::acquireWakeLock_l();
         mActiveTracks.updatePowerState_l(this, true /* force */);
@@ -2365,8 +2362,6 @@ class MmapThread : public ThreadBase, public virtual IAfMmapThread
     sp<StreamHalInterface> stream() const final { return mHalStream; }
     status_t addEffectChain_l(const sp<IAfEffectChain>& chain) final REQUIRES(mutex());
     size_t removeEffectChain_l(const sp<IAfEffectChain>& chain) final REQUIRES(mutex());
-    status_t checkEffectCompatibility_l(
-            const effect_descriptor_t *desc, audio_session_t sessionId) final REQUIRES(mutex());
 
     uint32_t hasAudioSession_l(audio_session_t sessionId) const override REQUIRES(mutex()) {
                                 // Note: using mActiveTracks as no mTracks here.
@@ -2461,11 +2456,6 @@ public:
     void setMasterBalance(float /* value */) final EXCLUDES_ThreadBase_Mutex {}
     void setMasterMute(bool muted) final EXCLUDES_ThreadBase_Mutex;
 
-    void setStreamVolume(audio_stream_type_t stream, float value, bool muted) final
-            EXCLUDES_ThreadBase_Mutex;
-    void setStreamMute(audio_stream_type_t stream, bool muted) final EXCLUDES_ThreadBase_Mutex;
-    float streamVolume(audio_stream_type_t stream) const final EXCLUDES_ThreadBase_Mutex;
-
     void setMasterMute_l(bool muted) REQUIRES(mutex()) { mMasterMute = muted; }
 
     audio_stream_type_t streamType_l() const final REQUIRES(mutex()) {
@@ -2497,12 +2487,6 @@ public:
 
 protected:
     void dumpInternals_l(int fd, const Vector<String16>& args) final REQUIRES(mutex());
-    float streamVolume_l() const REQUIRES(mutex()) {
-                    return mStreamTypes[mStreamType].volume;
-                }
-    bool streamMuted_l() const REQUIRES(mutex()) {
-                    return mStreamTypes[mStreamType].mute;
-                }
 
     stream_type_t mStreamTypes[AUDIO_STREAM_CNT] GUARDED_BY(mutex());
     audio_stream_type_t mStreamType GUARDED_BY(mutex());

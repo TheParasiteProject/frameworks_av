@@ -967,7 +967,7 @@ void ThreadBase::processConfigEvents_l()
                 event->mCondition.notify_one();
             }
         }
-        ALOGV_IF(mConfigEvents.isEmpty(), "processConfigEvents_l() DONE thread %p", this);
+        ALOGV_IF(mConfigEvents.empty(), "processConfigEvents_l() DONE thread %p", this);
     }
 
     if (configChanged) {
@@ -1451,21 +1451,31 @@ NO_THREAD_SAFETY_ANALYSIS  // manual locking
 }
 
 // checkEffectCompatibility_l() must be called with ThreadBase::mutex() held
-status_t RecordThread::checkEffectCompatibility_l(
+status_t ThreadBase::checkEffectCompatibility_l(
         const effect_descriptor_t *desc, audio_session_t sessionId)
 {
-    // No global output effect sessions on record threads
-    if (sessionId == AUDIO_SESSION_OUTPUT_MIX
+    if (isOutput()) {
+        // no preprocessing on playback threads
+        if ((desc->flags & EFFECT_FLAG_TYPE_MASK) == EFFECT_FLAG_TYPE_PRE_PROC) {
+            ALOGW("%s: pre processing effect %s created on playback thread %s",
+                __func__, desc->name, mThreadName);
+            return BAD_VALUE;
+        }
+    } else {
+        // No global output effect sessions on record threads
+        if (sessionId == AUDIO_SESSION_OUTPUT_MIX
             || sessionId == AUDIO_SESSION_OUTPUT_STAGE) {
-        ALOGW("checkEffectCompatibility_l(): global effect %s on record thread %s",
-                desc->name, mThreadName);
-        return BAD_VALUE;
-    }
-    // only pre processing effects on record thread
-    if ((desc->flags & EFFECT_FLAG_TYPE_MASK) != EFFECT_FLAG_TYPE_PRE_PROC) {
-        ALOGW("checkEffectCompatibility_l(): non pre processing effect %s on record thread %s",
-                desc->name, mThreadName);
-        return BAD_VALUE;
+            ALOGW("%s: global effect (session %d) %s on record thread %s",
+                  __func__, sessionId, desc->name, mThreadName);
+            return BAD_VALUE;
+        }
+
+        // only preprocessing effects on record threads for now.
+        if ((desc->flags & EFFECT_FLAG_TYPE_MASK) != EFFECT_FLAG_TYPE_PRE_PROC) {
+            ALOGW("%s: non pre processing effect %s on record thread %s",
+                  __func__, desc->name, mThreadName);
+            return BAD_VALUE;
+        }
     }
 
     // always allow effects without processing load or latency
@@ -1473,43 +1483,7 @@ status_t RecordThread::checkEffectCompatibility_l(
         return NO_ERROR;
     }
 
-    audio_input_flags_t flags = mInput->flags;
-    if (hasFastCapture() || (flags & AUDIO_INPUT_FLAG_FAST)) {
-        if (flags & AUDIO_INPUT_FLAG_RAW) {
-            ALOGW("checkEffectCompatibility_l(): effect %s on record thread %s in raw mode",
-                  desc->name, mThreadName);
-            return BAD_VALUE;
-        }
-        if ((desc->flags & EFFECT_FLAG_HW_ACC_TUNNEL) == 0) {
-            ALOGW("checkEffectCompatibility_l(): non HW effect %s on record thread %s in fast mode",
-                  desc->name, mThreadName);
-            return BAD_VALUE;
-        }
-    }
-
-    if (IAfEffectModule::isHapticGenerator(&desc->type)) {
-        ALOGE("%s(): HapticGenerator is not supported in RecordThread", __func__);
-        return BAD_VALUE;
-    }
-    return NO_ERROR;
-}
-
-// checkEffectCompatibility_l() must be called with ThreadBase::mutex() held
-status_t PlaybackThread::checkEffectCompatibility_l(
-        const effect_descriptor_t *desc, audio_session_t sessionId)
-{
-    // no preprocessing on playback threads
-    if ((desc->flags & EFFECT_FLAG_TYPE_MASK) == EFFECT_FLAG_TYPE_PRE_PROC) {
-        ALOGW("%s: pre processing effect %s created on playback"
-                " thread %s", __func__, desc->name, mThreadName);
-        return BAD_VALUE;
-    }
-
-    // always allow effects without processing load or latency
-    if ((desc->flags & EFFECT_FLAG_NO_PROCESS_MASK) == EFFECT_FLAG_NO_PROCESS) {
-        return NO_ERROR;
-    }
-
+    // Note mHapticChannelCount == 0 for Record threads.
     if (IAfEffectModule::isHapticGenerator(&desc->type) && mHapticChannelCount == 0) {
         ALOGW("%s: thread (%s) doesn't support haptic playback while the effect is HapticGenerator",
               __func__, threadTypeToString(mType));
@@ -1518,8 +1492,8 @@ status_t PlaybackThread::checkEffectCompatibility_l(
 
     if (IAfEffectModule::isSpatializer(&desc->type)
             && mType != SPATIALIZER) {
-        ALOGW("%s: attempt to create a spatializer effect on a thread of type %d",
-                __func__, mType);
+        ALOGW("%s: attempt to create a spatializer effect on a thread %s",
+                __func__, threadTypeToString(mType));
         return BAD_VALUE;
     }
 
@@ -1641,6 +1615,35 @@ status_t PlaybackThread::checkEffectCompatibility_l(
             return BAD_VALUE;
         }
         break;
+    case DIRECT_RECORD:
+    case RECORD: {
+            const audio_input_flags_t flags = mInput->flags;
+            if (hasFastCapture() || (flags & AUDIO_INPUT_FLAG_FAST)) {
+                if (flags & AUDIO_INPUT_FLAG_RAW) {
+                    ALOGW("%s: effect %s on record thread %s in raw mode",
+                          __func__, desc->name, mThreadName);
+                    return BAD_VALUE;
+                }
+                if ((desc->flags & EFFECT_FLAG_HW_ACC_TUNNEL) == 0) {
+                    ALOGW("%s: non HW effect %s on record thread %s in fast mode",
+                          __func__, desc->name, mThreadName);
+                    return BAD_VALUE;
+                }
+            }
+        }
+        break;
+    case MMAP_CAPTURE:
+    case MMAP_PLAYBACK: {
+        // No global effect sessions on mmap threads (DEVICE, STAGE, or MIX).
+        if (audio_is_global_session(sessionId)) {
+            ALOGW("%s: no global effect (session %d) %s on MMAP thread %s",
+                    __func__, sessionId, desc->name, mThreadName);
+            return BAD_VALUE;
+        }
+
+        ALOGW("%s: cannot use effect %s on MMap thread %s", __func__, desc->name, mThreadName);
+        return BAD_VALUE;
+    }
     default:
         LOG_ALWAYS_FATAL("checkEffectCompatibility_l(): wrong thread type %d", mType);
     }
@@ -2897,30 +2900,6 @@ void PlaybackThread::setMasterMute(bool muted)
     }
 }
 
-void PlaybackThread::setStreamVolume(audio_stream_type_t stream, float value, bool muted)
-{
-    ALOGV("%s: stream %d value %f muted %d", __func__, stream, value, muted);
-    audio_utils::lock_guard _l(mutex());
-    mStreamTypes[stream].volume = value;
-    if (com_android_media_audio_ring_my_car()) {
-        mStreamTypes[stream].mute = muted;
-    }
-    broadcast_l();
-}
-
-void PlaybackThread::setStreamMute(audio_stream_type_t stream, bool muted)
-{
-    audio_utils::lock_guard _l(mutex());
-    mStreamTypes[stream].mute = muted;
-    broadcast_l();
-}
-
-float PlaybackThread::streamVolume(audio_stream_type_t stream) const
-{
-    audio_utils::lock_guard _l(mutex());
-    return mStreamTypes[stream].volume;
-}
-
 void PlaybackThread::setVolumeForOutput_l(float left, float right) const
 {
     mOutput->stream->setVolume(left, right);
@@ -3941,7 +3920,9 @@ void PlaybackThread::detachAuxEffect_l(int effectId)
 bool PlaybackThread::threadLoop()
 NO_THREAD_SAFETY_ANALYSIS  // manual locking of AudioFlinger
 {
-    if (mType == SPATIALIZER) {
+    // Check the flag and not the mixer type to also boost the duplicating thread priority
+    // when one of the outputs is a spatializer thread.
+    if (mOutput != nullptr && ((mOutput->flags & AUDIO_OUTPUT_FLAG_SPATIALIZER) != 0)) {
         const pid_t tid = getTid();
         if (tid == -1) {  // odd: we are here, we must be a running thread.
             ALOGW("%s: Cannot update Spatializer mixer thread priority, no tid", __func__);
@@ -7892,11 +7873,11 @@ void DuplicatingThread::removeOutputTrack(IAfPlaybackThread* thread)
 void DuplicatingThread::updateWaitTime_l()
 {
     // Initialize mWaitTimeMs according to the mixer buffer size.
-    mWaitTimeMs = mNormalFrameCount * 2 * 1000 / mSampleRate;
+    mWaitTimeMs = mNormalFrameCount * 1000 / mSampleRate;
     for (const auto& track : mOutputTracks) {
         const auto strong = track->thread().promote();
         if (strong != 0) {
-            uint32_t waitTimeMs = (strong->frameCount() * 2 * 1000) / strong->sampleRate();
+            uint32_t waitTimeMs = (strong->frameCount() * 1000) / strong->sampleRate();
             if (waitTimeMs < mWaitTimeMs) {
                 mWaitTimeMs = waitTimeMs;
             }
@@ -11023,40 +11004,6 @@ bool MmapThread::isValidSyncEvent(
     return false;
 }
 
-status_t MmapThread::checkEffectCompatibility_l(
-        const effect_descriptor_t *desc, audio_session_t sessionId)
-{
-    // No global effect sessions on mmap threads
-    if (audio_is_global_session(sessionId)) {
-        ALOGW("checkEffectCompatibility_l(): global effect %s on MMAP thread %s",
-                desc->name, mThreadName);
-        return BAD_VALUE;
-    }
-
-    if (!isOutput() && ((desc->flags & EFFECT_FLAG_TYPE_MASK) != EFFECT_FLAG_TYPE_PRE_PROC)) {
-        ALOGW("checkEffectCompatibility_l(): non pre processing effect %s on capture mmap thread",
-                desc->name);
-        return BAD_VALUE;
-    }
-    if (isOutput() && ((desc->flags & EFFECT_FLAG_TYPE_MASK) == EFFECT_FLAG_TYPE_PRE_PROC)) {
-        ALOGW("checkEffectCompatibility_l(): pre processing effect %s created on playback mmap "
-              "thread", desc->name);
-        return BAD_VALUE;
-    }
-
-    // Only allow effects without processing load or latency
-    if ((desc->flags & EFFECT_FLAG_NO_PROCESS_MASK) != EFFECT_FLAG_NO_PROCESS) {
-        return BAD_VALUE;
-    }
-
-    if (IAfEffectModule::isHapticGenerator(&desc->type)) {
-        ALOGE("%s(): HapticGenerator is not supported for MmapThread", __func__);
-        return BAD_VALUE;
-    }
-
-    return NO_ERROR;
-}
-
 void MmapThread::checkInvalidTracks_l()
 {
     for (const auto& track : mActiveTracks) {
@@ -11178,34 +11125,6 @@ void MmapPlaybackThread::setMasterMute(bool muted)
         mMasterMute = false;
     } else {
         mMasterMute = muted;
-    }
-}
-
-void MmapPlaybackThread::setStreamVolume(audio_stream_type_t stream, float value, bool muted)
-{
-    ALOGV("%s: stream %d value %f muted %d", __func__, stream, value, muted);
-    audio_utils::lock_guard _l(mutex());
-    mStreamTypes[stream].volume = value;
-    if (com_android_media_audio_ring_my_car()) {
-        mStreamTypes[stream].mute = muted;
-    }
-    if (stream == mStreamType) {
-        broadcast_l();
-    }
-}
-
-float MmapPlaybackThread::streamVolume(audio_stream_type_t stream) const
-{
-    audio_utils::lock_guard _l(mutex());
-    return mStreamTypes[stream].volume;
-}
-
-void MmapPlaybackThread::setStreamMute(audio_stream_type_t stream, bool muted)
-{
-    audio_utils::lock_guard _l(mutex());
-    mStreamTypes[stream].mute = muted;
-    if (stream == mStreamType) {
-        broadcast_l();
     }
 }
 

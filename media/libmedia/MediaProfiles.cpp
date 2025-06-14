@@ -35,6 +35,8 @@
 #include <string>
 #include <vector>
 
+#include <android_media_mediarecorder.h>
+
 namespace android {
 
 namespace /* unnamed */ {
@@ -92,6 +94,7 @@ const MediaProfiles::NameToTagMap MediaProfiles::sVideoEncoderNameMap[] = {
     {"hevc", VIDEO_ENCODER_HEVC},
     {"vp9",  VIDEO_ENCODER_VP9},
     {"dolbyvision", VIDEO_ENCODER_DOLBY_VISION},
+    {"apv", VIDEO_ENCODER_APV},
 };
 
 const MediaProfiles::NameToTagMap MediaProfiles::sChromaSubsamplingNameMap[] = {
@@ -413,8 +416,8 @@ MediaProfiles::detectAdvancedVideoProfile(
         default:
             return false;
         }
+        // flow does not get here
     }
-    // flow does not get here
     default:
         return false;
     }
@@ -435,6 +438,11 @@ MediaProfiles::createVideoCodec(const char **atts, size_t natts, MediaProfiles *
     const int codec = findTagForName(sVideoEncoderNameMap, nMappings, atts[1]);
     if (codec == -1) {
         ALOGE("MediaProfiles::createVideoCodec failed to locate codec %s", atts[1]);
+        return;
+    }
+
+    if (codec == VIDEO_ENCODER_APV && !android::media::mediarecorder::apv_recording_support()) {
+        ALOGE("APV media recording is not supported.");
         return;
     }
 
