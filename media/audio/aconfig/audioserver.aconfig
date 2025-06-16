@@ -78,14 +78,6 @@ flag {
 }
 
 flag {
-    name: "power_stats"
-    namespace: "media_audio"
-    description:
-        "Add power stats tracking and management."
-    bug: "350114693"
-}
-
-flag {
     name: "remove_stream_suspend"
     namespace: "media_audio"
     description: "Remove the output stream suspend state and control mechanism"
