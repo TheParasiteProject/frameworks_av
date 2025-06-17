@@ -2218,10 +2218,8 @@ bool ThreadBase::invalidateTracks_l(std::set<audio_port_handle_t>* portIds) {
             // To fix this, set hint to issue flush when an offload track is invalidated.
             mFlushPending = true;
         }
-        // TODO(b/410038399) consider to apply broadcast to all threads for symmetry.
-        if (type() == MMAP_PLAYBACK || type() == MMAP_CAPTURE) {
-            broadcast_l();
-        }
+
+        broadcast_l();
     }
     return trackMatch;
 }
