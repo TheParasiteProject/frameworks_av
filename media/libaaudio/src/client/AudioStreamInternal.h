@@ -157,6 +157,8 @@ protected:
 
     aaudio_result_t startCallback_l() REQUIRES(mStreamMutex);
 
+    virtual bool mayNeedToDrain() const { return false; }
+
     IsochronousClockModel    mClockModel;      // timing model for chasing the HAL
 
     std::unique_ptr<AudioEndpoint> mAudioEndpoint;   // source for reads or sink for writes

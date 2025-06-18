@@ -10244,6 +10244,8 @@ public:
     status_t stop(audio_port_handle_t handle) final;
     status_t standby() final;
     status_t reportData(const void* buffer, size_t frameCount) final;
+    status_t drain() final;
+    status_t activate() final;
 private:
     const sp<IAfMmapThread> mThread;
 };
@@ -10302,6 +10304,14 @@ status_t MmapThreadHandle::standby()
 status_t MmapThreadHandle::reportData(const void* buffer, size_t frameCount)
 {
     return mThread->reportData(buffer, frameCount);
+}
+
+status_t MmapThreadHandle::drain() {
+    return mThread->drain();
+}
+
+status_t MmapThreadHandle::activate() {
+    return mThread->activate();
 }
 
 
@@ -10700,6 +10710,16 @@ NO_THREAD_SAFETY_ANALYSIS  // clang bug
 }
 
 status_t MmapThread::reportData(const void* /*buffer*/, size_t /*frameCount*/) {
+    // This is a stub implementation. The MmapPlaybackThread overrides this function.
+    return INVALID_OPERATION;
+}
+
+status_t MmapThread::drain() {
+    // This is a stub implementation. The MmapPlaybackThread overrides this function.
+    return INVALID_OPERATION;
+}
+
+status_t MmapThread::activate() {
     // This is a stub implementation. The MmapPlaybackThread overrides this function.
     return INVALID_OPERATION;
 }
@@ -11368,6 +11388,16 @@ status_t MmapPlaybackThread::reportData(const void* buffer, size_t frameCount) {
         processor->process(buffer, frameCount * mFrameSize);
     }
 
+    return NO_ERROR;
+}
+
+status_t MmapPlaybackThread::drain() {
+    releaseWakeLock();
+    return NO_ERROR;
+}
+
+status_t MmapPlaybackThread::activate() {
+    acquireWakeLock();
     return NO_ERROR;
 }
 
