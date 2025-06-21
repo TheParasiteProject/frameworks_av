@@ -1060,6 +1060,10 @@ protected:
                                           bool internal,
                                           bool isCallRx,
                                           uint32_t delayMs);
+
+        void checkSpatializedClientsReroute(const sp<SwAudioOutputDescriptor>& outputDesc,
+                                            const DeviceVector &devices);
+
         const uid_t mUidCached;                         // AID_AUDIOSERVER
         sp<const AudioPolicyConfig> mConfig;
         EngineInstance mEngine;                         // Audio Policy Engine instance

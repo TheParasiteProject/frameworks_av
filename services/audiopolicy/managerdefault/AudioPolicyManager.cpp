@@ -1618,7 +1618,7 @@ status_t AudioPolicyManager::getOutputForAttr(const audio_attributes_t *attr,
                                   toVolumeSource(resultAttr),
                                   *flags, isRequestedDeviceForExclusiveUse,
                                   std::move(weakSecondaryOutputDescs),
-                                  outputDesc->mPolicyMix);
+                                  outputDesc->mPolicyMix, *isSpatialized);
     outputDesc->addClient(clientDesc);
 
     ALOGV("%s() returns output %d requestedPortIds %s selectedDeviceIds %s for port ID %d",
@@ -4065,7 +4065,7 @@ audio_io_handle_t AudioPolicyManager::selectOutputForMusicEffects()
                 outputOffloaded = outputLoop;
             }
             if ((desc->mFlags & AUDIO_OUTPUT_FLAG_SPATIALIZER) != 0) {
-                if (SpatializerHelper::isStereoSpatializationFeatureEnabled()) {
+                if (SpatializerHelper::isStereoSpatializationFeatureEnabled(devices.types())) {
                     outputSpatializer = outputLoop;
                 }
             }
@@ -6647,7 +6647,8 @@ bool AudioPolicyManager::canBeSpatializedInt(const audio_attributes_t *attr,
 
     if (config != nullptr && *config != AUDIO_CONFIG_INITIALIZER) {
         const bool channel_mask_spatialized =
-                SpatializerHelper::isStereoSpatializationFeatureEnabled()
+                SpatializerHelper::isStereoSpatializationFeatureEnabled(
+                        getAudioDeviceTypes(devices))
                         ? audio_channel_mask_contains_stereo(config->channel_mask)
                         : audio_is_channel_mask_spatialized(config->channel_mask);
         if (!channel_mask_spatialized) {
@@ -8374,9 +8375,33 @@ uint32_t AudioPolicyManager::setOutputDevices(const char *caller,
         applyStreamVolumes(outputDesc, filteredDevices.types(), delayMs);
     }
 
+    checkSpatializedClientsReroute(outputDesc, filteredDevices);
+
     return muteWaitMs;
 }
 
+void AudioPolicyManager::checkSpatializedClientsReroute(
+        const sp<SwAudioOutputDescriptor>& outputDesc, const DeviceVector &devices) {
+    PortHandleVector clientsToInvalidate;
+    for (auto client : outputDesc->clientsList()) {
+        if (client->isInvalid()) {
+            continue;
+        }
+        audio_attributes_t attr = client->attributes();
+        audio_config_base_t clientConfig = client->config();
+        audio_config_t config = audio_config_initializer(&clientConfig);
+        AudioDeviceTypeAddrVector devicesTypeAddress = devices.toTypeAddrVector();
+        if (client->isSpatialized() !=
+                canBeSpatializedInt(&attr, &config, devicesTypeAddress)) {
+            clientsToInvalidate.push_back(client->portId());
+        }
+    }
+    if (!clientsToInvalidate.empty()) {
+        ALOGD("%s Invalidate clients to reevaluate spatialized state",
+              __func__);
+        mpClientInterface->invalidateTracks(clientsToInvalidate);
+    }
+}
 status_t AudioPolicyManager::resetOutputDevice(const sp<AudioOutputDescriptor>& outputDesc,
                                                int delayMs,
                                                audio_patch_handle_t *patchHandle)
