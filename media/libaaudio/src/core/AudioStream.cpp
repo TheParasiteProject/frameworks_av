@@ -692,6 +692,30 @@ aaudio_result_t AudioStream::flushFromFrame(AAudio_FlushFromAccuracy accuracy, i
     return result;
 }
 
+aaudio_result_t AudioStream::setPlaybackParameters(const AAudioPlaybackParameters* parameters) {
+    ALOGD("%s, fallbackMode=%d, stretchMode=%d, pitch=%f, speed=%f", __func__,
+          parameters->fallbackMode, parameters->stretchMode, parameters->pitch, parameters->speed);
+    if (!com_android_media_audioserver_mmap_pcm_offload_support()) {
+        return AAUDIO_ERROR_UNIMPLEMENTED;
+    }
+    if (getDirection() != AAUDIO_DIRECTION_OUTPUT) {
+        return AAUDIO_ERROR_ILLEGAL_ARGUMENT;
+    }
+    std::lock_guard lock(mStreamLock);
+    return setPlaybackParameters_l(parameters);
+}
+
+aaudio_result_t AudioStream::getPlaybackParameters(AAudioPlaybackParameters* parameters) {
+    if (!com_android_media_audioserver_mmap_pcm_offload_support()) {
+        return AAUDIO_ERROR_UNIMPLEMENTED;
+    }
+    if (getDirection() != AAUDIO_DIRECTION_OUTPUT) {
+        return AAUDIO_ERROR_ILLEGAL_ARGUMENT;
+    }
+    std::lock_guard lock(mStreamLock);
+    return getPlaybackParameters_l(parameters);
+}
+
 int AudioStream::dataCallbackInternal(void *audioData, int32_t numFrames) {
     const aaudio_data_callback_result_t result = std::invoke(mDataCallbackProc,
             (AAudioStream*) this,

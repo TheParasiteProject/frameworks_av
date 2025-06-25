@@ -51,6 +51,11 @@ protected:
     aaudio_result_t requestStop_l() REQUIRES(mStreamLock) override;
     aaudio_result_t systemStopInternal_l() REQUIRES(mStreamLock) final;
 
+    aaudio_result_t setPlaybackParameters_l(
+            const AAudioPlaybackParameters* parameters) final REQUIRES(mStreamLock);
+    aaudio_result_t getPlaybackParameters_l(
+            struct AAudioPlaybackParameters* parameters) const final REQUIRES(mStreamLock);
+
     bool collidesWithCallback() const final;
 
     void onStreamEnd() final;

@@ -29,6 +29,7 @@
 
 #include <aaudio/AAudio.h>
 #include <media/AudioContainers.h>
+#include <media/AudioResamplerPublic.h>
 #include <media/AudioSystem.h>
 #include <media/PlayerBase.h>
 #include <media/VolumeShaper.h>
@@ -99,6 +100,17 @@ protected:
     virtual aaudio_result_t flushFromFrame_l(AAudio_FlushFromAccuracy accuracy [[maybe_unused]],
                                              int64_t* position [[maybe_unused]])
                                              REQUIRES(mStreamLock) {
+        return AAUDIO_ERROR_UNIMPLEMENTED;
+    }
+
+    virtual aaudio_result_t setPlaybackParameters_l(
+            const AAudioPlaybackParameters* parameters [[maybe_unused]])
+            REQUIRES(mStreamLock) {
+        return AAUDIO_ERROR_UNIMPLEMENTED;
+    }
+    virtual aaudio_result_t getPlaybackParameters_l(
+            AAudioPlaybackParameters* parameters [[maybe_unused]]) const
+            REQUIRES(mStreamLock) {
         return AAUDIO_ERROR_UNIMPLEMENTED;
     }
 
@@ -528,6 +540,11 @@ public:
     aaudio_result_t safeReleaseCloseInternal() EXCLUDES(mStreamLock);
 
     aaudio_result_t flushFromFrame(AAudio_FlushFromAccuracy accuracy, int64_t* position)
+            EXCLUDES(mStreamLock);
+
+    aaudio_result_t setPlaybackParameters(const AAudioPlaybackParameters* parameters)
+            EXCLUDES(mStreamLock);
+    aaudio_result_t getPlaybackParameters(struct AAudioPlaybackParameters* parameters)
             EXCLUDES(mStreamLock);
 
 protected:
