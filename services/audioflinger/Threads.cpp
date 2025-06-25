@@ -661,7 +661,9 @@ ThreadBase::ThreadBase(const sp<IAfThreadCallback>& afThreadCallback, audio_io_h
         mSystemReady(systemReady),
         mSignalPending(false),
         mInput(input),
-        mOutput(output)
+        mOutput(output),
+        mIsOffload(output != nullptr &&
+                (output->flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) != 0)
 {
     mThreadMetrics.logConstructor(getpid(), threadTypeToString(type), id);
     memset(&mPatch, 0, sizeof(struct audio_patch));
