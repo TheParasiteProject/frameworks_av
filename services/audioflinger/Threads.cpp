@@ -10567,10 +10567,16 @@ status_t MmapThread::start(const AudioClient& client,
     bool checkEffect = mOutput && (mOutput->flags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) != 0;
 
     mutex().unlock();
-    if (checkEffect && track->isNonOffloadableEffectEnabled()) {
-        mutex().lock();
-        track->invalidate();
-        return PERMISSION_DENIED;
+    if (checkEffect) {
+        ret = mAfThreadCallback->tryMoveEffectChain(track->sessionId(), this);
+        if (ret == NO_ERROR && track->isNonOffloadableEffectEnabled()) {
+            ret = PERMISSION_DENIED;
+        }
+        if (ret != NO_ERROR) {
+            mutex().lock();
+            track->invalidate();
+            return ret;
+        }
     }
     track->start();
     mutex().lock();
