@@ -1850,9 +1850,9 @@ status_t ThreadBase::addEffect_ll(const sp<IAfEffectModule>& effect)
     sp<IAfEffectChain> chain = getEffectChain_l(sessionId);
     bool chainCreated = false;
 
-    ALOGD_IF((mType == OFFLOAD) && !effect->isOffloadable(),
-             "%s: on offloaded thread %p: effect %s does not support offload flags %#x",
-             __func__, this, effect->desc().name, effect->desc().flags);
+    ALOGD_IF(mIsOffload && !effect->isOffloadable(),
+             "%s: on offload thread(%d): effect %s does not support offload flags %#x",
+             __func__, mId, effect->desc().name, effect->desc().flags);
 
     if (chain == 0) {
         // create a new chain for this session
@@ -1870,7 +1870,7 @@ status_t ThreadBase::addEffect_ll(const sp<IAfEffectModule>& effect)
         return BAD_VALUE;
     }
 
-    effect->setOffloaded_l(mType == OFFLOAD, mId);
+    effect->setOffloaded_l(mIsOffload, mId);
 
     status_t status = chain->addEffect(effect);
     if (status != NO_ERROR) {
