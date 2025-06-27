@@ -6574,7 +6574,6 @@ bool AudioPolicyManager::isCallScreenModeSupported()
     return mConfig->isCallScreenModeSupported();
 }
 
-
 status_t AudioPolicyManager::disconnectAudioSource(const sp<SourceClientDescriptor>& sourceDesc)
 {
     ALOGV("%s port Id %d", __FUNCTION__, sourceDesc->portId());
