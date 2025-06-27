@@ -541,6 +541,18 @@ sp<DeviceDescriptor> Engine::getInputDeviceForAttributes(const audio_attributes_
         return device;
     }
 
+    if (com::android::media::audioserver::cap_engine_preferred_device_improvement()) {
+        // Use the preferred device for the input source if it is available.
+        DeviceVector preferredInputDevices =
+                getPreferredAvailableDevicesForInputSource(availableInputDevices, attr.source);
+        if (!preferredInputDevices.isEmpty()) {
+            // Currently, only support single device for input. The public JAVA API also only
+            // support setting single device as preferred device. In that case, returning the
+            // first device is OK here.
+            return preferredInputDevices[0];
+        }
+    }
+
     audio_devices_t deviceType = getPropertyForKey<audio_devices_t, audio_source_t>(attr.source);
 
     if (deviceType == AUDIO_DEVICE_IN_ECHO_REFERENCE) {
