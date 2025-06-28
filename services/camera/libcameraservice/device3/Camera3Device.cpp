@@ -356,9 +356,7 @@ status_t Camera3Device::disconnectImpl() {
         mStatusTracker->join();
     }
 
-    if (mInjectionMethods->isInjecting()) {
-        mInjectionMethods->stopInjection();
-    }
+    mInjectionMethods->stopInjection();
 
     HalInterface* interface;
     {
