@@ -727,6 +727,35 @@ void AudioStreamTrack::maybeCallPresentationEndCallback() {
     }
 }
 
+aaudio_result_t AudioStreamTrack::setPlaybackParameters_l(
+        const AAudioPlaybackParameters* parameters) {
+    if (mAudioTrack.get() == nullptr) {
+        ALOGE("%s() no AudioTrack", __func__);
+        return AAUDIO_ERROR_INVALID_STATE;
+    }
+    android::AudioPlaybackRate rate = mAudioTrack->getPlaybackRate();
+    if (aaudio_result_t result =
+            AAudioConvert_aaudioToAndroidPlaybackParameters(*parameters, &rate);
+        result != AAUDIO_OK) {
+        return result;
+    }
+    if (android::status_t status = mAudioTrack->setPlaybackRate(rate);
+        status != android::NO_ERROR) {
+        return AAudioConvert_androidToAAudioResult(status);
+    }
+    return AAUDIO_OK;
+}
+
+aaudio_result_t AudioStreamTrack::getPlaybackParameters_l(
+        AAudioPlaybackParameters* parameters) const {
+    if (mAudioTrack.get() == nullptr) {
+        ALOGE("%s() no AudioTrack", __func__);
+        return AAUDIO_ERROR_INVALID_STATE;
+    }
+    android::AudioPlaybackRate rate = mAudioTrack->getPlaybackRate();
+    return AAudioConvert_androidToAAudioPlaybackParameters(rate, parameters);
+}
+
 #if AAUDIO_USE_VOLUME_SHAPER
 
 using namespace android::media::VolumeShaper;
