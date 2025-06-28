@@ -5285,7 +5285,7 @@ TEST_F_WITH_FLAGS(
         EXPECT_EQ(usbInMixPortProfiles[i]->getHalId(), inProfile->getHalId());
 
         DeviceVector outDevices(outDevDesc);
-        SortedVector<audio_io_handle_t> outIoHandles =
+        std::set<audio_io_handle_t> outIoHandles =
               mManager->getOutputsForDevices(outDevices, mManager->getOutputs());
 
         for (audio_io_handle_t handle : outIoHandles) {
