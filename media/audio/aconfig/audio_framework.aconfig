@@ -60,6 +60,7 @@ flag {
     namespace: "media_audio"
     description: "Dynamic AudioPolicy management of injection starvation"
     bug: "416965224"
+    is_exported: true
 }
 
 flag {
