@@ -40,9 +40,9 @@ public:
 
     aaudio_result_t open(const AudioStreamBuilder &builder) override;
 
-    aaudio_result_t requestPause_l() override;
+    aaudio_result_t requestPause_l() REQUIRES(mStreamMutex) override;
 
-    aaudio_result_t requestFlush_l() override;
+    aaudio_result_t requestFlush_l() REQUIRES(mStreamMutex) override;
 
     bool isFlushSupported() const override {
         // Only implement FLUSH for OUTPUT streams.
@@ -67,7 +67,7 @@ public:
         return AAUDIO_DIRECTION_OUTPUT;
     }
 
-    aaudio_result_t setOffloadEndOfStream() EXCLUDES(mStreamLock) final;
+    aaudio_result_t setOffloadEndOfStream() EXCLUDES(mStreamMutex) final;
 
     void setPresentationEndCallbackProc(AAudioStream_presentationEndCallback proc) final {
         mPresentationEndCallbackProc = proc;
@@ -101,11 +101,11 @@ protected:
                              int64_t currentTimeNanos,
                              int64_t *wakeTimePtr) override;
 
-    aaudio_result_t requestStop_l() REQUIRES(mStreamLock) final;
+    aaudio_result_t requestStop_l() REQUIRES(mStreamMutex) final;
 
-    void wakeupCallbackThread() final;
+    void wakeupCallbackThread_l() REQUIRES(mStreamMutex) final;
     aaudio_result_t flushFromFrame_l(AAudio_FlushFromAccuracy accuracy, int64_t* position)
-            REQUIRES(mStreamLock) final;
+            REQUIRES(mStreamMutex) final;
 private:
     /*
      * Asynchronous write with data conversion.
@@ -116,25 +116,24 @@ private:
     aaudio_result_t writeNowWithConversion(const void *buffer,
                                            int32_t numFrames);
 
-    bool shouldStopStream();
+    bool shouldStopStream() EXCLUDES(mStreamMutex);
     void maybeCallPresentationEndCallback();
-    void dropPresentationEndCallback();
+    void dropPresentationEndCallback_l() REQUIRES(mStreamMutex);
 
     android::sp<AudioStreamInternalPlay> getPtr() { return this; }
 
-    bool mOffloadEosPending GUARDED_BY(mStreamEndMutex){false};
-    std::mutex mStreamEndMutex;
+    bool mOffloadEosPending GUARDED_BY(mStreamMutex){false};
     std::condition_variable mStreamEndCV;
-    std::optional<android::mediautils::SingleThreadExecutor> mStreamEndExecutor;
+    std::optional<android::mediautils::SingleThreadExecutor> mStreamEndExecutor
+            GUARDED_BY(mStreamMutex);
     AAudioStream_presentationEndCallback mPresentationEndCallbackProc = nullptr;
     void                                *mPresentationEndCallbackUserData = nullptr;
     std::atomic<pid_t>                   mPresentationEndCallbackThread{CALLBACK_THREAD_NONE};
 
     static constexpr int32_t kOffloadSafeMarginMs = 100;
     int32_t mOffloadSafeMarginInFrames = 0;
-    std::mutex mCallbackMutex;
     std::condition_variable mCallbackCV;
-    bool mSuspendCallback GUARDED_BY(mCallbackMutex){false};
+    bool mSuspendCallback GUARDED_BY(mStreamMutex){false};
 
     std::mutex mEndpointMutex;
 };
