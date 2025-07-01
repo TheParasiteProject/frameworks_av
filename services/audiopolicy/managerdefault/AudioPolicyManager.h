@@ -19,6 +19,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <set>
 #include <unordered_set>
 
 #include <stdint.h>
@@ -28,7 +29,6 @@
 #include <utils/Timers.h>
 #include <utils/Errors.h>
 #include <utils/KeyedVector.h>
-#include <utils/SortedVector.h>
 #include <media/AudioParameter.h>
 #include <media/AudioPolicy.h>
 #include <media/AudioProfile.h>
@@ -772,7 +772,7 @@ protected:
         // transfers the audio tracks and effects from one output thread to another accordingly.
         status_t checkOutputsForDevice(const sp<DeviceDescriptor>& device,
                                        audio_policy_dev_state_t state,
-                                       SortedVector<audio_io_handle_t>& outputs);
+                                       std::set<audio_io_handle_t>& outputs);
 
         status_t checkInputsForDevice(const sp<DeviceDescriptor>& device,
                                       audio_policy_dev_state_t state);
@@ -882,7 +882,7 @@ protected:
             return mEffects.getMaxEffectsMemory();
         }
 
-        SortedVector<audio_io_handle_t> getOutputsForDevices(
+        std::set<audio_io_handle_t> getOutputsForDevices(
                 const DeviceVector &devices, const SwAudioOutputCollection& openOutputs);
 
         /**
@@ -899,7 +899,7 @@ protected:
                                                    const DeviceVector &prevDevices,
                                                    uint32_t delayMs);
 
-        audio_io_handle_t selectOutput(const SortedVector<audio_io_handle_t>& outputs,
+        audio_io_handle_t selectOutput(const std::set<audio_io_handle_t>& outputs,
                                        audio_output_flags_t flags = AUDIO_OUTPUT_FLAG_NONE,
                                        audio_format_t format = AUDIO_FORMAT_INVALID,
                                        audio_channel_mask_t channelMask = AUDIO_CHANNEL_NONE,
