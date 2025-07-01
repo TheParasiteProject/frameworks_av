@@ -2112,7 +2112,7 @@ Status AudioPolicyService::registerPolicyMixes(const std::vector<media::AudioMix
     if (size > MAX_MIXES_PER_POLICY) {
         size = MAX_MIXES_PER_POLICY;
     }
-    Vector<AudioMix> mixes;
+    std::vector<AudioMix> mixes;
     RETURN_IF_BINDER_ERROR(binderStatusFromStatusT(
             convertRange(mixesAidl.begin(), mixesAidl.begin() + size, std::back_inserter(mixes),
                          aidl2legacy_AudioMix)));

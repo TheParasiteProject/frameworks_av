@@ -4186,13 +4186,13 @@ bool AudioPolicyManager::isSourceActive(audio_source_t source) const
 //  - 2 if none found, look for a mix matching the attributes usage
 //  - 3 if none found, default to device and output selection by policy rules.
 
-status_t AudioPolicyManager::registerPolicyMixes(const Vector<AudioMix>& mixes)
+status_t AudioPolicyManager::registerPolicyMixes(const std::vector<AudioMix>& mixes)
 {
     ALOGV("registerPolicyMixes() %zu mix(es)", mixes.size());
     status_t res = NO_ERROR;
     bool checkOutputs = false;
     sp<HwModule> rSubmixModule;
-    Vector<AudioMix> registeredMixes;
+    std::vector<AudioMix> registeredMixes;
     AudioDeviceTypeAddrVector devices;
     // examine each mix's route type
     for (size_t i = 0; i < mixes.size(); i++) {
@@ -4318,7 +4318,7 @@ status_t AudioPolicyManager::registerPolicyMixes(const Vector<AudioMix>& mixes)
             } else {
                 checkOutputs = true;
                 devices.push_back(AudioDeviceTypeAddr(mix.mDeviceType, mix.mDeviceAddress.c_str()));
-                registeredMixes.add(mix);
+                registeredMixes.push_back(mix);
             }
         }
     }
@@ -4337,7 +4337,7 @@ status_t AudioPolicyManager::registerPolicyMixes(const Vector<AudioMix>& mixes)
     return res;
 }
 
-status_t AudioPolicyManager::unregisterPolicyMixes(Vector<AudioMix> mixes)
+status_t AudioPolicyManager::unregisterPolicyMixes(const std::vector<AudioMix>& mixes)
 {
     ALOGV("unregisterPolicyMixes() num mixes %zu", mixes.size());
     status_t res = NO_ERROR;
@@ -6269,11 +6269,11 @@ status_t AudioPolicyManager::setMasterMono(bool mono)
     // and tracks are able to be recreated as offloaded. The next "song" should
     // play back offloaded.
     if (mMasterMono) {
-        Vector<audio_io_handle_t> offloaded;
+        std::vector<audio_io_handle_t> offloaded;
         for (size_t i = 0; i < mOutputs.size(); ++i) {
             sp<SwAudioOutputDescriptor> desc = mOutputs.valueAt(i);
             if (desc->mFlags & AUDIO_OUTPUT_FLAG_COMPRESS_OFFLOAD) {
-                offloaded.push(desc->mIoHandle);
+                offloaded.push_back(desc->mIoHandle);
             }
         }
         for (const auto& handle : offloaded) {

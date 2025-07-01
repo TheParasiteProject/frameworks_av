@@ -365,8 +365,8 @@ public:
             return mSoundTriggerSessions.releaseSession(session);
         }
 
-        virtual status_t registerPolicyMixes(const Vector<AudioMix>& mixes);
-        virtual status_t unregisterPolicyMixes(Vector<AudioMix> mixes);
+        status_t registerPolicyMixes(const std::vector<AudioMix>& mixes) override;
+        status_t unregisterPolicyMixes(const std::vector<AudioMix>& mixes) override;
         virtual status_t getRegisteredPolicyMixes(std::vector<AudioMix>& mixes) override;
         virtual status_t updatePolicyMix(
                 const AudioMix& mix,
