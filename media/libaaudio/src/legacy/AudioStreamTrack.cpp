@@ -340,9 +340,9 @@ void AudioStreamTrack::close_l() {
     // So we should join callbacks explicitly before returning.
     // Unlock around the join to avoid deadlocks if the callback tries to lock.
     // This can happen if the callback returns AAUDIO_CALLBACK_RESULT_STOP
-    mStreamLock.unlock();
+    mStreamMutex.unlock();
     mAudioTrack->stopAndJoinCallbacks();
-    mStreamLock.lock();
+    mStreamMutex.lock();
     mAudioTrack.clear();
     // Do not close mFixedBlockReader. It has a unique_ptr to its buffer
     // so it will clean up by itself.
@@ -681,7 +681,7 @@ aaudio_result_t AudioStreamTrack::setOffloadEndOfStream() {
     if (mAudioTrack == nullptr) {
         return AAUDIO_ERROR_INVALID_STATE;
     }
-    std::lock_guard<std::mutex> lock(mStreamLock);
+    std::lock_guard<std::mutex> lock(mStreamMutex);
     if (aaudio_result_t result = safeStop_l(); result != AAUDIO_OK) {
         return result;
     }
@@ -703,7 +703,7 @@ void AudioStreamTrack::onStreamEnd() {
         return;
     }
     if (getState() == AAUDIO_STREAM_STATE_STOPPING) {
-        std::lock_guard<std::mutex> lock(mStreamLock);
+        std::lock_guard<std::mutex> lock(mStreamMutex);
         if (mOffloadEosPending) {
             requestStart_l();
         } else {
@@ -754,6 +754,14 @@ aaudio_result_t AudioStreamTrack::getPlaybackParameters_l(
     }
     android::AudioPlaybackRate rate = mAudioTrack->getPlaybackRate();
     return AAudioConvert_androidToAAudioPlaybackParameters(rate, parameters);
+}
+
+bool AudioStreamTrack::shouldStopStream() {
+    if (getPerformanceMode() != AAUDIO_PERFORMANCE_MODE_POWER_SAVING_OFFLOADED) {
+        return true;
+    }
+    std::lock_guard _l(mStreamMutex);
+    return !mOffloadEosPending;
 }
 
 #if AAUDIO_USE_VOLUME_SHAPER
