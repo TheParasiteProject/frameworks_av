@@ -23,6 +23,7 @@
 #include <chrono>
 #include <thread>
 
+#include <audio_utils/mutex.h>
 #include <media/MediaMetricsItem.h>
 #include <mediautils/Runnable.h>
 #include <utils/Trace.h>
@@ -77,6 +78,7 @@ aaudio_result_t AudioStreamInternalPlay::open(const AudioStreamBuilder &builder)
         !isDataCallbackSet() && mPresentationEndCallbackProc != nullptr) {
         // Client is not using data callback but has presentation end callback for offload playback,
         // initialize an executor for presentation end callback.
+        std::lock_guard _l(mStreamMutex);
         mStreamEndExecutor.emplace();
     }
     mOffloadSafeMarginInFrames = std::max(
@@ -85,7 +87,7 @@ aaudio_result_t AudioStreamInternalPlay::open(const AudioStreamBuilder &builder)
     return result;
 }
 
-// This must be called under mStreamLock.
+// This must be called under mStreamMutex.
 aaudio_result_t AudioStreamInternalPlay::requestPause_l()
 {
     aaudio_result_t result = stopCallback_l();
@@ -103,7 +105,7 @@ aaudio_result_t AudioStreamInternalPlay::requestPause_l()
 
     // When pause is called, the service will notify the HAL so that no more data will be consumed.
     // In that case, it is no longer needed to wait for stream end.
-    dropPresentationEndCallback();
+    dropPresentationEndCallback_l();
 
     return mServiceInterface.pauseStream(mServiceStreamHandleInfo);
 }
@@ -118,7 +120,7 @@ aaudio_result_t AudioStreamInternalPlay::requestFlush_l() {
 
     // When flush is called, the service will notify the HAL so that no more data will be consumed.
     // In that case, it is no longer needed to wait for stream end.
-    dropPresentationEndCallback();
+    dropPresentationEndCallback_l();
 
     return mServiceInterface.flushStream(mServiceStreamHandleInfo);
 }
@@ -432,30 +434,30 @@ aaudio_result_t AudioStreamInternalPlay::setOffloadEndOfStream() {
         // Offload playback must be exclusive mode.
         return AAUDIO_ERROR_UNIMPLEMENTED;
     }
-    std::lock_guard<std::mutex> lock(mStreamLock);
+    std::lock_guard<std::mutex> lock(mStreamMutex);
     if (getState() != AAUDIO_STREAM_STATE_STARTED || mClockModel.isStarting()) {
         // If the stream is not running or there is not timestamp from the service side,
         // it is not possible to set offload end of stream.
         return AAUDIO_ERROR_INVALID_STATE;
     }
-    {
-        std::lock_guard<std::mutex> offloadEosLock(mStreamEndMutex);
-        mOffloadEosPending = true;
-    }
+    mOffloadEosPending = true;
     if (!isDataCallbackSet()) {
         const int64_t streamEndNanos = mClockModel.convertDeltaPositionToTime(
                 std::max(0, mAudioEndpoint->getFullFramesAvailable() - getDeviceFramesPerBurst()));
         auto streamPtr = getPtr();
         mStreamEndExecutor->enqueue(android::mediautils::Runnable{
             [streamPtr, streamEndNanos]() {
-                std::unique_lock<std::mutex> ul(streamPtr->mStreamEndMutex);
-                streamPtr->mStreamEndCV.wait_for(
-                        ul, std::chrono::nanoseconds(streamEndNanos),
-                        [streamPtr]() { return !streamPtr->mOffloadEosPending; });
-                if (streamPtr->mOffloadEosPending) {
-                    streamPtr->maybeCallPresentationEndCallback();
+                {
+                    android::audio_utils::unique_lock ul(streamPtr->mStreamMutex);
+                    streamPtr->mStreamEndCV.wait_for(
+                            ul, std::chrono::nanoseconds(streamEndNanos),
+                            [streamPtr]() REQUIRES(streamPtr->mStreamMutex) {
+                                return !streamPtr->mOffloadEosPending;
+                            });
+                    if (!streamPtr->mOffloadEosPending) return;
                     streamPtr->mOffloadEosPending = false;
                 }
+                streamPtr->maybeCallPresentationEndCallback();
             }});
     }
     return AAUDIO_OK;
@@ -465,7 +467,7 @@ bool AudioStreamInternalPlay::shouldStopStream() {
     if (getPerformanceMode() != AAUDIO_PERFORMANCE_MODE_POWER_SAVING_OFFLOADED) {
         return true;
     }
-    std::lock_guard<std::mutex> offloadEosLock(mStreamEndMutex);
+    std::lock_guard _l(mStreamMutex);
     return !mOffloadEosPending;
 }
 
@@ -482,23 +484,19 @@ void AudioStreamInternalPlay::maybeCallPresentationEndCallback() {
     }
 }
 
-void AudioStreamInternalPlay::dropPresentationEndCallback() {
-    {
-        std::lock_guard<std::mutex> offloadEosLock(mStreamEndMutex);
-        mOffloadEosPending = false;
-    }
+void AudioStreamInternalPlay::dropPresentationEndCallback_l() {
+    mOffloadEosPending = false;
     mStreamEndCV.notify_one();
 }
 
 aaudio_result_t AudioStreamInternalPlay::requestStop_l() {
     // When stop is called, the service will notify the HAL so that no more data will be consumed.
     // In that case, it is no longer needed to wait for stream end.
-    dropPresentationEndCallback();
+    dropPresentationEndCallback_l();
     return AudioStreamInternal::requestStop_l();
 }
 
-void AudioStreamInternalPlay::wakeupCallbackThread() {
-    std::lock_guard<std::mutex> _l(mCallbackMutex);
+void AudioStreamInternalPlay::wakeupCallbackThread_l() {
     mSuspendCallback = false;
     mCallbackCV.notify_one();
 }
@@ -551,11 +549,8 @@ aaudio_result_t AudioStreamInternalPlay::flushFromFrame_l(
         mLastFramesWritten = actualPosition;
         mAudioEndpoint->setDataWriteCounter(actualPosition - mFramesOffsetFromService);
     }
-    {
-        std::lock_guard _streamEndLock(mStreamEndMutex);
-        mOffloadEosPending = false;
-    }
-    wakeupCallbackThread();
+    mOffloadEosPending = false;
+    wakeupCallbackThread_l();
     return result;
 }
 
@@ -571,13 +566,13 @@ void *AudioStreamInternalPlay::callbackLoop() {
     while (mCallbackEnabled.load() && isActive() && (result >= 0)) {
         processCommands();
         {
-            std::unique_lock<std::mutex> ul(mStreamEndMutex);
+            android::audio_utils::unique_lock ul(mStreamMutex);
             if (mOffloadEosPending) {
                 const int64_t streamEndNanos = mClockModel.convertDeltaPositionToTime(std::max(0,
                         mAudioEndpoint->getFullFramesAvailable() - getDeviceFramesPerBurst()));
                 mStreamEndCV.wait_for(
                         ul, std::chrono::nanoseconds(streamEndNanos),
-                        [this]() { return !mOffloadEosPending; });
+                        [this]() REQUIRES(mStreamMutex) { return !mOffloadEosPending; });
                 if (mOffloadEosPending) {
                     maybeCallPresentationEndCallback();
                     mOffloadEosPending = false;
@@ -628,11 +623,11 @@ void *AudioStreamInternalPlay::callbackLoop() {
             if (fullFrames > getDeviceBufferSize() - mOffloadSafeMarginInFrames) {
                 int64_t drainNanos = mClockModel.convertDeltaPositionToTime(
                         std::max(fullFrames - mOffloadSafeMarginInFrames, 0));
-                std::unique_lock<std::mutex> ul(mStreamEndMutex);
+                android::audio_utils::unique_lock _ul(mStreamMutex);
                 mSuspendCallback = true;
                 mCallbackCV.wait_for(
-                        ul, std::chrono::nanoseconds(drainNanos),
-                        [this]() { return !mSuspendCallback; });
+                        _ul, std::chrono::nanoseconds(drainNanos),
+                        [this]() REQUIRES(mStreamMutex) { return !mSuspendCallback; });
             }
         }
     }

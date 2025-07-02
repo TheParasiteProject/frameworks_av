@@ -204,7 +204,7 @@ Status AudioPolicyService::setDeviceConnectionState(
     status_t status = mAudioPolicyManager->setDeviceConnectionState(
             state, port, encodedFormat, deviceSwitch);
     if (status == NO_ERROR) {
-        onCheckSpatializer_l();
+        maybeCheckSpatializer_l();
     }
     return binderStatusFromStatusT(status);
 }
@@ -257,7 +257,7 @@ Status AudioPolicyService::handleDeviceConfigChange(
             device, address.c_str(), deviceNameAidl.c_str(), encodedFormat);
 
     if (status == NO_ERROR) {
-       onCheckSpatializer_l();
+       maybeCheckSpatializer_l();
     }
     return binderStatusFromStatusT(status);
 }
@@ -338,7 +338,7 @@ Status AudioPolicyService::setForceUse(media::AudioPolicyForceUse usageAidl,
     audio_utils::lock_guard _l(mMutex);
     AutoCallerClear acc;
     mAudioPolicyManager->setForceUse(usage, config);
-    onCheckSpatializer_l();
+    maybeCheckSpatializer_l();
     return Status::ok();
 }
 
@@ -2112,7 +2112,7 @@ Status AudioPolicyService::registerPolicyMixes(const std::vector<media::AudioMix
     if (size > MAX_MIXES_PER_POLICY) {
         size = MAX_MIXES_PER_POLICY;
     }
-    Vector<AudioMix> mixes;
+    std::vector<AudioMix> mixes;
     RETURN_IF_BINDER_ERROR(binderStatusFromStatusT(
             convertRange(mixesAidl.begin(), mixesAidl.begin() + size, std::back_inserter(mixes),
                          aidl2legacy_AudioMix)));
@@ -2679,7 +2679,7 @@ Status AudioPolicyService::setDevicesRoleForStrategy(
     audio_utils::lock_guard _l(mMutex);
     status_t status = mAudioPolicyManager->setDevicesRoleForStrategy(strategy, role, devices);
     if (status == NO_ERROR) {
-       onCheckSpatializer_l();
+       maybeCheckSpatializer_l();
     }
     return binderStatusFromStatusT(status);
 }
@@ -2702,7 +2702,7 @@ Status AudioPolicyService::removeDevicesRoleForStrategy(
     audio_utils::lock_guard _l(mMutex);
     status_t status = mAudioPolicyManager->removeDevicesRoleForStrategy(strategy, role, devices);
     if (status == NO_ERROR) {
-       onCheckSpatializer_l();
+       maybeCheckSpatializer_l();
     }
     return binderStatusFromStatusT(status);
 }
@@ -2719,7 +2719,7 @@ Status AudioPolicyService::clearDevicesRoleForStrategy(int32_t strategyAidl,
     audio_utils::lock_guard _l(mMutex);
     status_t status = mAudioPolicyManager->clearDevicesRoleForStrategy(strategy, role);
     if (status == NO_ERROR) {
-       onCheckSpatializer_l();
+       maybeCheckSpatializer_l();
     }
     return binderStatusFromStatusT(status);
 }

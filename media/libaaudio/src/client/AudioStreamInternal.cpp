@@ -354,7 +354,7 @@ aaudio_result_t AudioStreamInternal::configureDataInformation(int32_t callbackFr
     return AAUDIO_OK;
 }
 
-// This must be called under mStreamLock.
+// This must be called under mStreamMutex.
 aaudio_result_t AudioStreamInternal::release_l() {
     aaudio_result_t result = AAUDIO_OK;
     ALOGD("%s(): mServiceStreamHandle = 0x%08X", __func__, getServiceHandle());
@@ -545,13 +545,13 @@ int64_t AudioStreamInternal::calculateReasonableTimeout() {
     return calculateReasonableTimeout(getFramesPerBurst());
 }
 
-// This must be called under mStreamLock.
+// This must be called under mStreamMutex.
 aaudio_result_t AudioStreamInternal::stopCallback_l()
 {
     if (isDataCallbackSet() && (isActive() || isDisconnected())) {
         mCallbackEnabled.store(false);
-        wakeupCallbackThread();
-        aaudio_result_t result = joinThread_l(nullptr); // may temporarily unlock mStreamLock
+        wakeupCallbackThread_l();
+        aaudio_result_t result = joinThread_l(nullptr); // may temporarily unlock mStreamMutex
         if (result == AAUDIO_ERROR_INVALID_HANDLE) {
             ALOGD("%s() INVALID_HANDLE, stream was probably stolen", __func__);
             result = AAUDIO_OK;
