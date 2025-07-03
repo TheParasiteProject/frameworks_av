@@ -2369,7 +2369,8 @@ OutputTrack::OutputTrack(
               nullptr /* buffer */, (size_t)0 /* bufferSize */, nullptr /* sharedBuffer */,
               AUDIO_SESSION_NONE, getpid(), attributionSource, AUDIO_OUTPUT_FLAG_NONE,
               TYPE_OUTPUT, AUDIO_PORT_HANDLE_NONE,
-              /*frameCountToBeReady*/ playbackThread->frameCount()),
+              /*frameCountToBeReady*/ sourceFramesNeededWithTimestretch(sampleRate,
+                      playbackThread->frameCount(), playbackThread->sampleRate(), 1.0f /*speed*/)),
     mActive(false), mSourceThread(sourceThread)
 {
     if (mCblk != NULL) {
@@ -2386,6 +2387,8 @@ OutputTrack::OutputTrack(
         mClientProxy->setVolumeLR(GAIN_MINIFLOAT_PACKED_UNITY);
         mClientProxy->setSendLevel(0.0);
         mClientProxy->setSampleRate(sampleRate);
+        uint32_t waitTimeMs = (playbackThread->frameCount() * 1000) / playbackThread->sampleRate();
+        mClientProxy->setMinMeasureMs(waitTimeMs);
     } else {
         ALOGW("%s(%d): Error creating output track on thread %d",
                 __func__, mId, (int)mThreadIoHandle);
@@ -2466,7 +2469,7 @@ ssize_t OutputTrack::write(void* data, uint32_t frames)
     inBuffer.frameCount = frames;
     inBuffer.raw = data;
     uint32_t waitTimeLeftMs = mSourceThread->waitTimeMs();
-    while (waitTimeLeftMs) {
+    while (true) {
         // First write pending buffers, then new data
         if (mBufferQueue.size()) {
             pInBuffer = mBufferQueue.front();
@@ -2526,6 +2529,9 @@ ssize_t OutputTrack::write(void* data, uint32_t frames)
             } else {
                 break;
             }
+        }
+        if (waitTimeLeftMs == 0) {
+            break;
         }
     }
 

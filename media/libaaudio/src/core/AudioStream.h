@@ -460,7 +460,7 @@ public:
     // A Stream will only implement read() or write() depending on its direction.
     virtual aaudio_result_t write(const void *buffer __unused,
                              int32_t numFrames __unused,
-                             int64_t timeoutNanoseconds __unused) {
+                             int64_t timeoutNanoseconds __unused) EXCLUDES(mStreamMutex) {
         return AAUDIO_ERROR_UNIMPLEMENTED;
     }
 

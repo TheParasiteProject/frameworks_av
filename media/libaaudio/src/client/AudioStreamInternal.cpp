@@ -890,6 +890,10 @@ aaudio_result_t AudioStreamInternal::processData(void *buffer, int32_t numFrames
         framesLeft -= (int32_t) framesProcessed;
         audioData += framesProcessed * getBytesPerFrame();
 
+        if (mayNeedToDrain() && framesLeft <= 0) {
+            break;
+        }
+
         // Should we block?
         if (timeoutNanoseconds == 0) {
             break; // don't block
