@@ -77,7 +77,7 @@ public:
 
     aaudio_result_t write(const void *buffer,
                              int32_t numFrames,
-                             int64_t timeoutNanoseconds) override;
+                             int64_t timeoutNanoseconds) EXCLUDES(mStreamMutex) override;
 
     aaudio_result_t setBufferSize(int32_t requestedFrames) override;
     int32_t getBufferSize() const override;

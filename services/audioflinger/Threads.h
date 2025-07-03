@@ -2325,6 +2325,8 @@ class MmapThread : public ThreadBase, public virtual IAfMmapThread
     status_t getExternalPosition(uint64_t* position, int64_t* timeNanos) const
             EXCLUDES_ThreadBase_Mutex = 0;
     status_t reportData(const void* buffer, size_t frameCount) override EXCLUDES_ThreadBase_Mutex;
+    status_t drain() override EXCLUDES_ThreadBase_Mutex;
+    status_t activate() override EXCLUDES_ThreadBase_Mutex;
 
     // RefBase
     void onFirstRef() final;
@@ -2466,6 +2468,9 @@ public:
     status_t getExternalPosition(uint64_t* position, int64_t* timeNanos) const final;
 
     status_t reportData(const void* buffer, size_t frameCount) final;
+
+    status_t drain() final;
+    status_t activate() final;
 
     void startMelComputation_l(const sp<audio_utils::MelProcessor>& processor) final
             REQUIRES(audio_utils::AudioFlinger_Mutex);
