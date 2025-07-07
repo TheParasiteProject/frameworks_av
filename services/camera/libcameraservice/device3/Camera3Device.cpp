@@ -3658,6 +3658,7 @@ bool Camera3Device::RequestThread::updateSessionParameters(const CameraMetadata&
             }
 
             if (isDifferent) {
+                mForceNewRequest = true;
                 ALOGV("%s: Session parameter tag id %d changed", __FUNCTION__, tag);
                 if (!skipHFRTargetFPSUpdate(tag, entry, lastEntry)) {
                     updatesDetected = true;
@@ -3734,6 +3735,7 @@ bool Camera3Device::RequestThread::threadLoop() {
     //  or a single request from streaming or burst. In either case the first element
     //  should contain the latest camera settings that we need to check for any session
     //  parameter updates.
+    mForceNewRequest = false;
     if (updateSessionParameters(mNextRequests[0].captureRequest->mSettingsList.begin()->metadata)) {
         res = OK;
 
@@ -3752,7 +3754,7 @@ bool Camera3Device::RequestThread::threadLoop() {
             sp<Camera3Device> parent = mParent.promote();
             if (parent != nullptr) {
                 if (parent->reconfigureCamera(mLatestSessionParams, mStatusId)) {
-                    mForceNewRequestAfterReconfigure = true;
+                    mForceNewRequest = true;
                     mReconfigured = true;
                 }
             }
@@ -3877,12 +3879,15 @@ status_t Camera3Device::RequestThread::prepareHalRequests() {
 
         // If the request is the same as last, or we had triggers now or last time or
         // changing overrides this time
+        //
+        // Force request when we inject requests that contain different values from
+        // previous ones or if the requests trigger reconfiguration
         bool newRequest =
                 (mPrevRequest != captureRequest || triggersMixedIn ||
                          captureRequest->mRotateAndCropChanged ||
                          captureRequest->mAutoframingChanged ||
                          captureRequest->mTestPatternChanged || settingsOverrideChanged ||
-                         (flags::inject_session_params() && mForceNewRequestAfterReconfigure)) &&
+                         (flags::inject_session_params() && mForceNewRequest)) &&
                 // Request settings are all the same within one batch, so only treat the first
                 // request in a batch as new
                 !(batchedRequest && i > 0);
@@ -3890,9 +3895,9 @@ status_t Camera3Device::RequestThread::prepareHalRequests() {
         if (newRequest) {
             std::set<std::string> cameraIdsWithZoom;
 
-            if (flags::inject_session_params() && mForceNewRequestAfterReconfigure) {
+            if (flags::inject_session_params() && mForceNewRequest) {
                 // This only needs to happen once.
-                mForceNewRequestAfterReconfigure = false;
+                mForceNewRequest = false;
             }
 
             /**
