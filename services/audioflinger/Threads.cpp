@@ -89,6 +89,7 @@
 #include <utils/Log.h>
 #include <utils/Trace.h>
 
+#include <algorithm>
 #include <fcntl.h>
 #include <linux/futex.h>
 #include <math.h>
@@ -113,15 +114,6 @@
 #else
 #define ALOGVV(a...) do { } while(0)
 #endif
-
-// TODO: Move these macro/inlines to a header file.
-#define max(a, b) ((a) > (b) ? (a) : (b))
-
-template <typename T>
-static inline T min(const T& a, const T& b)
-{
-    return a < b ? a : b;
-}
 
 using com::android::media::audio::audioserver_permissions;
 using com::android::media::permission::PermissionEnum::CAPTURE_AUDIO_HOTWORD;
@@ -2584,7 +2576,8 @@ sp<IAfTrack> PlaybackThread::createTrack_l(
             if (ok != 0) {
                 ALOGE("%s pthread_once failed: %d", __func__, ok);
             }
-            frameCount = max(frameCount, mFrameCount * sFastTrackMultiplier); // incl framecount 0
+            // incl framecount 0
+            frameCount = std::max(frameCount, mFrameCount * sFastTrackMultiplier);
         }
 
         // check compatibility with audio effects.
@@ -4474,8 +4467,8 @@ NO_THREAD_SAFETY_ANALYSIS  // manual locking of AudioFlinger
                                     const ssize_t
                                             availableToWrite = mPipeSink->availableToWrite();
                                     const size_t pipeFrames = monoPipe->maxFrames();
-                                    const size_t
-                                            remainingFrames = pipeFrames - max(availableToWrite, 0);
+                                    const size_t remainingFrames = pipeFrames -
+                                            std::max(availableToWrite, static_cast<ssize_t>(0));
                                     mMonopipePipeDepthStats.add(remainingFrames);
                                 }
                             }
@@ -4674,7 +4667,7 @@ void PlaybackThread::collectTimestamps_l()
                         timestamp.mPosition[ExtendedTimestamp::LOCATION_KERNEL]
                         - int64_t(mDownstreamLatencyStatMs.getMean() * mSampleRate * 1e-3);
                 // prevent retrograde
-                timestamp.mPosition[ExtendedTimestamp::LOCATION_KERNEL] = max(
+                timestamp.mPosition[ExtendedTimestamp::LOCATION_KERNEL] = std::max(
                         newPosition,
                         (mTimestamp.mPosition[ExtendedTimestamp::LOCATION_KERNEL]
                                 - mSuspendedFrames));
@@ -5479,10 +5472,11 @@ void MixerThread::threadLoop_sleepTime()
                 MonoPipe *monoPipe = static_cast<MonoPipe *>(mPipeSink.get());
                 const ssize_t availableToWrite = mPipeSink->availableToWrite();
                 const size_t pipeFrames = monoPipe->maxFrames();
-                const size_t framesLeft = pipeFrames - max(availableToWrite, 0);
+                const size_t framesLeft = pipeFrames -
+                        std::max(availableToWrite, static_cast<ssize_t>(0));
                 // HAL_framecount <= framesDelay ~ framesLeft / 2 <= Normal_Mixer_framecount
-                const size_t framesDelay = std::min(
-                        mNormalFrameCount, max(framesLeft / 2, mFrameCount));
+                const size_t framesDelay = std::clamp(static_cast<size_t>(framesLeft / 2),
+                        mFrameCount, mNormalFrameCount);
                 ALOGV("pipeFrames:%zu framesLeft:%zu framesDelay:%zu",
                         pipeFrames, framesLeft, framesDelay);
                 mSleepTimeUs = framesDelay * MICROS_PER_SECOND / mSampleRate;
@@ -5588,7 +5582,7 @@ PlaybackThread::mixer_state MixerThread::prepareTracks_l(
             if (*mMixerStatus == MIXER_TRACKS_READY && mUnderrunFrames.size() > 0) {
                 for (const auto &underrun : mUnderrunFrames) {
                     underrun.first->tallyUnderrunFrames(underrun.second);
-                    maxUnderrunFrames = max(underrun.second, maxUnderrunFrames);
+                    maxUnderrunFrames = std::max(underrun.second, maxUnderrunFrames);
                 }
             }
             // send the max underrun frames for this mixer period
@@ -8635,7 +8629,7 @@ reacquire_wakelock:
 
         // If an NBAIO source is present, use it to read the normal capture's data
         if (mPipeSource != 0) {
-            size_t framesToRead = min(mRsmpInFramesOA - rear, mRsmpInFramesP2 / 2);
+            size_t framesToRead = std::min(mRsmpInFramesOA - rear, mRsmpInFramesP2 / 2);
 
             // The audio fifo read() returns OVERRUN on overflow, and advances the read pointer
             // to the full buffer point (clearing the overflow condition).  Upon OVERRUN error,
@@ -8655,7 +8649,7 @@ reacquire_wakelock:
                         "more frames to read than fifo size, %zd > %zu",
                         availableToRead, mPipeFramesP2);
                 const size_t pipeFramesFree = mPipeFramesP2 - availableToRead;
-                const size_t sleepFrames = min(pipeFramesFree, mRsmpInFramesP2) / 2;
+                const size_t sleepFrames = std::min(pipeFramesFree, mRsmpInFramesP2) / 2;
                 ALOGVV("mPipeFramesP2:%zu mRsmpInFramesP2:%zu sleepFrames:%zu availableToRead:%zd",
                         mPipeFramesP2, mRsmpInFramesP2, sleepFrames, availableToRead);
                 sleepUs = (sleepFrames * 1000000LL) / mSampleRate;
@@ -8816,7 +8810,7 @@ reacquire_wakelock:
                 // This isn't strictly necessary but helps limit buffer resizing in
                 // RecordBufferConverter.  TODO: remove when no longer needed.
                 if (audio_is_linear_pcm(activeTrack->format())) {
-                    framesOut = min(framesOut,
+                    framesOut = std::min(framesOut,
                             destinationFramesPossible(
                                     framesIn, mSampleRate, activeTrack->sampleRate()));
                 }
@@ -9162,8 +9156,8 @@ sp<IAfRecordTrack> RecordThread::createRecordTrack_l(
         const size_t minNotificationsByMs = (minFramesByMs + maxNotificationFrames - 1) /
                 maxNotificationFrames;
         const size_t minFrameCount = maxNotificationFrames *
-                max(kMinNotifications, minNotificationsByMs);
-        frameCount = max(frameCount, minFrameCount);
+                std::max(kMinNotifications, minNotificationsByMs);
+        frameCount = std::max(frameCount, minFrameCount);
         if (notificationFrameCount == 0 || notificationFrameCount > maxNotificationFrames) {
             notificationFrameCount = maxNotificationFrames;
         }
