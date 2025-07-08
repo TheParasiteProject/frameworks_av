@@ -28,7 +28,6 @@
 #include "ResamplerBufferProvider.h"
 
 #include <afutils/FallibleLockGuard.h>
-#include <afutils/Permission.h>
 #include <afutils/TypedLogger.h>
 #include <afutils/Vibrator.h>
 #include <audio_utils/MelProcessor.h>
@@ -115,7 +114,6 @@
 #define ALOGVV(a...) do { } while(0)
 #endif
 
-using com::android::media::audio::audioserver_permissions;
 using com::android::media::permission::PermissionEnum::CAPTURE_AUDIO_HOTWORD;
 using com::android::media::permission::ValidatedAttributionSourceState;
 namespace audioserver_flags = com::android::media::audioserver;
@@ -9035,22 +9033,15 @@ sp<IAfRecordTrack> RecordThread::createRecordTrack_l(
     }
 
     if (maxSharedAudioHistoryMs != 0) {
-        if (audioserver_permissions()) {
-            const auto res = mAfThreadCallback->getPermissionProvider().checkPermission(
-                    CAPTURE_AUDIO_HOTWORD,
-                    attributionSource.uid);
-            if (!res.ok()) {
-                lStatus = aidl_utils::statusTFromBinderStatus(res.error());
-            }
-            if (!res.value()) {
-                lStatus = PERMISSION_DENIED;
-                goto Exit;
-            }
-        } else {
-            if (!captureHotwordAllowed(attributionSource)) {
-                lStatus = PERMISSION_DENIED;
-                goto Exit;
-            }
+        const auto res = mAfThreadCallback->getPermissionProvider().checkPermission(
+                CAPTURE_AUDIO_HOTWORD,
+                attributionSource.uid);
+        if (!res.ok()) {
+            lStatus = aidl_utils::statusTFromBinderStatus(res.error());
+        }
+        if (!res.value()) {
+            lStatus = PERMISSION_DENIED;
+            goto Exit;
         }
         if (maxSharedAudioHistoryMs < 0
                 || maxSharedAudioHistoryMs > kMaxSharedAudioHistoryMs) {
@@ -9171,11 +9162,9 @@ sp<IAfRecordTrack> RecordThread::createRecordTrack_l(
         if (!mSharedAudioPackageName.empty()
                 && mSharedAudioPackageName == attributionSource.packageName
                 && mSharedAudioSessionId == sessionId
-                && (audioserver_permissions() ?
-                      mAfThreadCallback->getPermissionProvider().checkPermission(
+                && mAfThreadCallback->getPermissionProvider().checkPermission(
                           CAPTURE_AUDIO_HOTWORD,
-                          attributionSource.uid).value_or(false)
-                    : captureHotwordAllowed(attributionSource))) {
+                          attributionSource.uid).value_or(false)) {
             startFrames = mSharedAudioStartFrames;
         }
 
@@ -10447,22 +10436,14 @@ status_t MmapThread::start(const AudioClient& client,
 
     audio_io_handle_t io = mId;
     AttributionSourceState adjAttributionSource;
-    if (!com::android::media::audio::audioserver_permissions()) {
-        adjAttributionSource = afutils::checkAttributionSourcePackage(
-                client.attributionSource);
-    } else {
-        // TODO(b/342475009) validate in oboeservice, and plumb downwards
-        auto validatedRes = ValidatedAttributionSourceState::createFromTrustedUidNoPackage(
-                    client.attributionSource,
-                    mAfThreadCallback->getPermissionProvider()
-                );
-        if (!validatedRes.has_value()) {
-            ALOGE("MMAP client package validation fail: %s",
-                    validatedRes.error().toString8().c_str());
-            return aidl_utils::statusTFromBinderStatus(validatedRes.error());
-        }
-        adjAttributionSource = std::move(validatedRes.value()).unwrapInto();
+    // TODO(b/342475009) validate in oboeservice, and plumb downwards
+    auto validatedRes = ValidatedAttributionSourceState::createFromTrustedUidNoPackage(
+            client.attributionSource, mAfThreadCallback->getPermissionProvider());
+    if (!validatedRes.has_value()) {
+        ALOGE("MMAP client package validation fail: %s", validatedRes.error().toString8().c_str());
+        return aidl_utils::statusTFromBinderStatus(validatedRes.error());
     }
+    adjAttributionSource = std::move(validatedRes.value()).unwrapInto();
 
     const auto localSessionId = mSessionId;
     auto localAttr = mAttr;
