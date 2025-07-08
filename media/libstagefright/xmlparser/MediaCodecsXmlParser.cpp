@@ -38,7 +38,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <memory>
+#include <mutex>
 #include <string>
+#include <vector>
 
 namespace android {
 
