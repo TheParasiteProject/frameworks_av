@@ -193,7 +193,10 @@ aaudio_result_t AAudioServiceEndpointMMAP::openWithConfig(
         return AAUDIO_ERROR_ILLEGAL_ARGUMENT;
     }
 
-    const bool isOutput = direction == AAUDIO_DIRECTION_OUTPUT;
+    const MmapStreamInterface::stream_direction_t streamDirection =
+            (direction == AAUDIO_DIRECTION_OUTPUT)
+            ? MmapStreamInterface::DIRECTION_OUTPUT
+            : MmapStreamInterface::DIRECTION_INPUT;
 
     const aaudio_session_id_t requestedSessionId = getSessionId();
     audio_session_t sessionId = AAudioConvert_aaudioToAndroidSessionId(requestedSessionId);
@@ -217,8 +220,8 @@ aaudio_result_t AAudioServiceEndpointMMAP::openWithConfig(
 
     const std::lock_guard<std::mutex> lock(mMmapStreamLock);
     const status_t status = MmapStreamInterface::openMmapStream(
-            isOutput,
-            attributes,
+            streamDirection,
+            &attributes,
             config,
             mMmapClient,
             &deviceIds,
@@ -574,8 +577,8 @@ aaudio_result_t AAudioServiceEndpointMMAP::getDownDataDescription(
     return AAUDIO_OK;
 }
 
-aaudio_result_t AAudioServiceEndpointMMAP::getObservablePosition(
-        uint64_t *positionFrames, int64_t *timeNanos)
+aaudio_result_t AAudioServiceEndpointMMAP::getExternalPosition(uint64_t *positionFrames,
+                                                               int64_t *timeNanos)
 {
     const std::lock_guard<std::mutex> lock(mMmapStreamLock);
     if (mHalExternalPositionStatus != AAUDIO_OK) {
@@ -587,10 +590,9 @@ aaudio_result_t AAudioServiceEndpointMMAP::getObservablePosition(
     }
     uint64_t tempPositionFrames;
     int64_t tempTimeNanos;
-    const status_t status = mMmapStream->getObservablePosition(
-            &tempPositionFrames, &tempTimeNanos);
+    const status_t status = mMmapStream->getExternalPosition(&tempPositionFrames, &tempTimeNanos);
     if (status != OK) {
-        // getObservablePosition reports error. The HAL may not support the API. Cache the result
+        // getExternalPosition reports error. The HAL may not support the API. Cache the result
         // so that the call will not go to the HAL next time.
         mHalExternalPositionStatus = AAudioConvert_androidToAAudioResult(status);
         return mHalExternalPositionStatus;
@@ -701,9 +703,10 @@ aaudio_result_t AAudioServiceEndpointMMAP::createMmapBuffer_l()
         }
     }
 
-    // AAudio uses the copy of the shared_memory_fd transferred through the
-    // parcel. There is no need to dup the descriptor.
-    mAudioDataWrapper->getDataFileDescriptor().reset(mMmapBufferinfo.shared_memory_fd);
+    // AAudio creates a copy of this FD and retains ownership of the copy.
+    // Assume that AudioFlinger will close the original shared_memory_fd.
+
+    mAudioDataWrapper->getDataFileDescriptor().reset(dup(mMmapBufferinfo.shared_memory_fd));
     if (mAudioDataWrapper->getDataFileDescriptor().get() == -1) {
         ALOGE("%s() - could not dup shared_memory_fd", __func__);
         return AAUDIO_ERROR_INTERNAL;
