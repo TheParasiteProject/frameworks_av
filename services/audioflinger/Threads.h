@@ -2327,6 +2327,10 @@ class MmapThread : public ThreadBase, public virtual IAfMmapThread
     status_t reportData(const void* buffer, size_t frameCount) override EXCLUDES_ThreadBase_Mutex;
     status_t drain() override EXCLUDES_ThreadBase_Mutex;
     status_t activate() override EXCLUDES_ThreadBase_Mutex;
+    status_t setPlaybackParameters(const media::audio::common::AudioPlaybackRate& rate)
+            override EXCLUDES_ThreadBase_Mutex;
+    status_t getPlaybackParameters(media::audio::common::AudioPlaybackRate* rate)
+            override EXCLUDES_ThreadBase_Mutex;
 
     // RefBase
     void onFirstRef() final;
@@ -2471,6 +2475,11 @@ public:
 
     status_t drain() final;
     status_t activate() final;
+
+    status_t setPlaybackParameters(const media::audio::common::AudioPlaybackRate& rate)
+            final EXCLUDES_ThreadBase_Mutex;
+    status_t getPlaybackParameters(media::audio::common::AudioPlaybackRate* rate)
+            final EXCLUDES_ThreadBase_Mutex;
 
     void startMelComputation_l(const sp<audio_utils::MelProcessor>& processor) final
             REQUIRES(audio_utils::AudioFlinger_Mutex);
