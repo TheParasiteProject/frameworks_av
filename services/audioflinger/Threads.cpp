@@ -31,7 +31,6 @@
 #include <afutils/Permission.h>
 #include <afutils/TypedLogger.h>
 #include <afutils/Vibrator.h>
-#include <android/media/BnMmapStream.h>
 #include <audio_utils/MelProcessor.h>
 #include <audio_utils/Metadata.h>
 #include <audio_utils/Trace.h>
@@ -10235,30 +10234,29 @@ std::string RecordThread::getLocalLogHeader() const {
 
 // Mmap stream control interface implementation. Each MmapThreadHandle controls one
 // MmapPlaybackThread or MmapCaptureThread instance.
-class MmapThreadHandle : public media::BnMmapStream {
+class MmapThreadHandle : public MmapStreamInterface {
 public:
     explicit MmapThreadHandle(const sp<IAfMmapThread>& thread);
     ~MmapThreadHandle() override;
 
-    binder::Status createMmapBuffer(
-            int32_t minSizeFrames, media::MmapBufferInfo* _aidl_return) final;
-    binder::Status getMmapPosition(media::IMmapStream::MmapStreamPosition* _aidl_return) final;
-    binder::Status getObservablePosition(
-            media::IMmapStream::MmapObservablePosition* _aidl_return) final;
-    binder::Status start(const media::AudioClient& client,
-            const ::std::optional< ::android::media::audio::common::AudioAttributes>& attr,
-            int32_t portId, int32_t* _aidl_return) final;
-    binder::Status stop(int32_t portId) final;
-    binder::Status standby() final;
-    binder::Status reportData(const ::std::vector<uint8_t>& buffer) final;
-    binder::Status drain() final;
-    binder::Status activate() final;
+    // MmapStreamInterface virtuals
+    status_t createMmapBuffer(int32_t minSizeFrames,
+        struct audio_mmap_buffer_info* info) final;
+    status_t getMmapPosition(struct audio_mmap_position* position) final;
+    status_t getExternalPosition(uint64_t* position, int64_t* timeNanos) final;
+    status_t start(const AudioClient& client,
+           const audio_attributes_t* attr, audio_port_handle_t* handle) final;
+    status_t stop(audio_port_handle_t handle) final;
+    status_t standby() final;
+    status_t reportData(const void* buffer, size_t frameCount) final;
+    status_t drain() final;
+    status_t activate() final;
 private:
     const sp<IAfMmapThread> mThread;
 };
 
 /* static */
-sp<media::IMmapStream> IAfMmapThread::createMmapStreamInterfaceAdapter(
+sp<MmapStreamInterface> IAfMmapThread::createMmapStreamInterfaceAdapter(
         const sp<IAfMmapThread>& mmapThread) {
     return sp<MmapThreadHandle>::make(mmapThread);
 }
@@ -10276,102 +10274,51 @@ MmapThreadHandle::~MmapThreadHandle()
     mThread->disconnect();
 }
 
-binder::Status MmapThreadHandle::createMmapBuffer(
-        int32_t minSizeFrames, media::MmapBufferInfo* _aidl_return)
+status_t MmapThreadHandle::createMmapBuffer(int32_t minSizeFrames,
+                                  struct audio_mmap_buffer_info *info)
 {
-    struct audio_mmap_buffer_info info;
-    const status_t status = mThread->createMmapBuffer(minSizeFrames, &info);
-    if (status == NO_ERROR) {
-        const int bufferFd = info.shared_memory_fd;
-        // we dup the bufferFd and then leave it to the Parcel and Binder
-        // to transfer and reclaim the resource.
-        _aidl_return->sharedFd.reset(binder::unique_fd(dup(bufferFd)));
-        _aidl_return->bufferSizeFrames = info.buffer_size_frames;
-        _aidl_return->burstSizeFrames = info.burst_size_frames;
-        _aidl_return->flags = static_cast<int32_t>(info.flags);
-    }
-    return aidl_utils::binderStatusFromStatusT(status);
+    return mThread->createMmapBuffer(minSizeFrames, info);
 }
 
-binder::Status MmapThreadHandle::getMmapPosition(
-        media::IMmapStream::MmapStreamPosition* _aidl_return)
+status_t MmapThreadHandle::getMmapPosition(struct audio_mmap_position* position)
 {
-    struct audio_mmap_position position;
-    const status_t status = mThread->getMmapPosition(&position);
-    if (status == NO_ERROR) {
-        _aidl_return->timeNanos = position.time_nanoseconds;
-        _aidl_return->positionFrames = position.position_frames;
-    }
-    return aidl_utils::binderStatusFromStatusT(status);
+    return mThread->getMmapPosition(position);
 }
 
-binder::Status MmapThreadHandle::getObservablePosition(
-        media::IMmapStream::MmapObservablePosition* _aidl_return)
+status_t MmapThreadHandle::getExternalPosition(uint64_t* position,
+                                                             int64_t *timeNanos) {
+    return mThread->getExternalPosition(position, timeNanos);
+}
+
+status_t MmapThreadHandle::start(const AudioClient& client,
+        const audio_attributes_t *attr, audio_port_handle_t *handle)
 {
-    uint64_t position;
-    int64_t timeNanos;
-    const status_t status = mThread->getObservablePosition(&position, &timeNanos);
-    if (status == NO_ERROR) {
-        _aidl_return->timeNanos = timeNanos;
-        _aidl_return->positionFrames = position;
-    }
-    return aidl_utils::binderStatusFromStatusT(status);
+    return mThread->start(client, attr, handle);
 }
 
-binder::Status MmapThreadHandle::start(
-        const ::android::media::AudioClient& client,
-        const ::std::optional<::android::media::audio::common::AudioAttributes>& attr,
-        int32_t portId,
-        int32_t* _aidl_return)
+status_t MmapThreadHandle::stop(audio_port_handle_t handle)
 {
-    const AudioClient legacyClient =
-            VALUE_OR_RETURN_BINDER_STATUS(aidl2legacy_AudioClient_AudioClient(client));
-    const audio_attributes_t legacyAttr = attr.has_value() ?
-            VALUE_OR_RETURN_BINDER_STATUS(
-                    aidl2legacy_AudioAttributes_audio_attributes_t(attr.value()))
-            : AUDIO_ATTRIBUTES_INITIALIZER;
-    audio_port_handle_t handle =
-            VALUE_OR_RETURN_BINDER_STATUS(aidl2legacy_int32_t_audio_port_handle_t(portId));
-    const status_t status = mThread->start(
-            legacyClient, attr.has_value() ? &legacyAttr : nullptr, &handle);
-    if (status == NO_ERROR) {
-        *_aidl_return =
-                VALUE_OR_RETURN_BINDER_STATUS(legacy2aidl_audio_port_handle_t_int32_t(handle));
-    }
-    return aidl_utils::binderStatusFromStatusT(status);
+    return mThread->stop(handle);
 }
 
-binder::Status MmapThreadHandle::stop(int32_t portId)
+status_t MmapThreadHandle::standby()
 {
-    const audio_port_handle_t handle =
-            VALUE_OR_RETURN_BINDER_STATUS(aidl2legacy_int32_t_audio_port_handle_t(portId));
-    const status_t status = mThread->stop(handle);
-    return aidl_utils::binderStatusFromStatusT(status);
+    return mThread->standby();
 }
 
-binder::Status MmapThreadHandle::standby()
+status_t MmapThreadHandle::reportData(const void* buffer, size_t frameCount)
 {
-    const status_t status = mThread->standby();
-    return aidl_utils::binderStatusFromStatusT(status);
+    return mThread->reportData(buffer, frameCount);
 }
 
-binder::Status MmapThreadHandle::reportData(const ::std::vector<uint8_t>& buffer)
-{
-    const size_t frameCount = buffer.size() /
-            std::max(mThread->frameSize(), static_cast<size_t>(1));
-    const status_t status = mThread->reportData(buffer.data(), frameCount);
-    return aidl_utils::binderStatusFromStatusT(status);
+status_t MmapThreadHandle::drain() {
+    return mThread->drain();
 }
 
-binder::Status MmapThreadHandle::drain() {
-    const status_t status = mThread->drain();
-    return aidl_utils::binderStatusFromStatusT(status);
+status_t MmapThreadHandle::activate() {
+    return mThread->activate();
 }
 
-binder::Status MmapThreadHandle::activate() {
-    const status_t status = mThread->activate();
-    return aidl_utils::binderStatusFromStatusT(status);
-}
 
 MmapThread::MmapThread(
         const sp<IAfThreadCallback>& afThreadCallback, audio_io_handle_t id,
@@ -10423,7 +10370,7 @@ void MmapThread::disconnect()
 void MmapThread::configure_l(const audio_attributes_t* attr,
                                                 audio_stream_type_t streamType __unused,
                                                 audio_session_t sessionId,
-                             const sp<media::IMmapStreamCallback>& callback,
+                                                const sp<MmapStreamCallback>& callback,
                                                 const DeviceIdVector& deviceIds,
                                                 audio_port_handle_t portId)
 {
@@ -10997,7 +10944,7 @@ NO_THREAD_SAFETY_ANALYSIS  // elease and re-acquire mutex()
     // For mmap streams, once the routing has changed, they will be disconnected. It should be
     // okay to notify the client earlier before the new patch creation.
     if (!areDeviceIdsEqual(deviceIds, mDeviceIds)) {
-        if (const sp<media::IMmapStreamCallback> callback = mCallback.promote()) {
+        if (const sp<MmapStreamCallback> callback = mCallback.promote()) {
             // The aaudioservice handle the routing changed event asynchronously. In that case,
             // it is safe to hold the lock here.
             callback->onRoutingChanged(deviceIds);
@@ -11138,7 +11085,7 @@ void MmapThread::threadLoop_standby()
 
 void MmapThread::threadLoop_exit()
 {
-    sp<media::IMmapStreamCallback> callback;
+    sp<MmapStreamCallback> callback;
     std::vector<audio_port_handle_t> portIds;
     {
         audio_utils::lock_guard _l(mutex());
@@ -11171,7 +11118,7 @@ void MmapThread::checkInvalidTracks_l()
 {
     for (const auto& track : mActiveTracks) {
         if (track->isInvalid()) {
-            if (const sp<media::IMmapStreamCallback> callback = mCallback.promote()) {
+            if (const sp<MmapStreamCallback> callback = mCallback.promote()) {
                 // The aaudioservice handle the routing changed event asynchronously. In that case,
                 // it is safe to hold the lock here.
                 callback->onRoutingChanged({});
@@ -11264,7 +11211,7 @@ MmapPlaybackThread::MmapPlaybackThread(
 void MmapPlaybackThread::configure(const audio_attributes_t* attr,
                                    audio_stream_type_t streamType,
                                    audio_session_t sessionId,
-                                   const sp<media::IMmapStreamCallback>& callback,
+                                   const sp<MmapStreamCallback>& callback,
                                    const DeviceIdVector& deviceIds,
                                    audio_port_handle_t portId,
                                    const audio_offload_info_t* offloadInfo)
@@ -11343,7 +11290,7 @@ NO_THREAD_SAFETY_ANALYSIS // access of track->processMuteEvent
             mHalVolFloat = volume; // HW volume control worked, so update value.
             mNoCallbackWarningCount = 0;
         } else {
-            sp<media::IMmapStreamCallback> callback = mCallback.promote();
+            sp<MmapStreamCallback> callback = mCallback.promote();
             if (callback != 0) {
                 mHalVolFloat = volume; // SW volume control worked, so update value.
                 mNoCallbackWarningCount = 0;
@@ -11425,7 +11372,7 @@ void MmapPlaybackThread::toAudioPortConfig(struct audio_port_config* config)
     }
 }
 
-status_t MmapPlaybackThread::getObservablePosition(uint64_t* position,
+status_t MmapPlaybackThread::getExternalPosition(uint64_t* position,
         int64_t* timeNanos) const
 {
     if (mOutput == nullptr) {
@@ -11513,7 +11460,7 @@ void MmapCaptureThread::processVolume_l()
     bool changed = false;
     bool silenced = false;
 
-    sp<media::IMmapStreamCallback> callback = mCallback.promote();
+    sp<MmapStreamCallback> callback = mCallback.promote();
     if (callback == 0) {
         if (mNoCallbackWarningCount < kMaxNoCallbackWarnings) {
             ALOGW("Could not set MMAP stream silenced: no onStreamSilenced callback!");
@@ -11580,7 +11527,7 @@ void MmapCaptureThread::toAudioPortConfig(struct audio_port_config* config)
     }
 }
 
-status_t MmapCaptureThread::getObservablePosition(
+status_t MmapCaptureThread::getExternalPosition(
         uint64_t* position, int64_t* timeNanos) const
 {
     if (mInput == nullptr) {

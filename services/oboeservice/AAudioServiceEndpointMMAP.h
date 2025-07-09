@@ -96,7 +96,7 @@ public:
         return mHardwareTimeOffsetNanos;
     }
 
-    aaudio_result_t getObservablePosition(uint64_t *positionFrames, int64_t *timeNanos)
+    aaudio_result_t getExternalPosition(uint64_t *positionFrames, int64_t *timeNanos)
             EXCLUDES(mMmapStreamLock);
 
     int64_t nextDataReportTime() EXCLUDES(mMmapStreamLock);
@@ -145,3 +145,4 @@ private:
 } /* namespace aaudio */
 
 #endif //AAUDIO_SERVICE_ENDPOINT_MMAP_H
+
