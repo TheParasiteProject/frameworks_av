@@ -1134,7 +1134,7 @@ status_t HeicCompositeStream::processInputFrame(int64_t frameNumber,
     if (!hdrGainmapFormatReady) {
         // If HDR gainmap is enabled, we need to wait until the gainmap format
         // is received from the codec before starting the muxer. Otherwise,
-        // the muxer will be able to add the gainmap track.
+        // the muxer will not be able to add the gainmap track.
         return OK;
     }
 
