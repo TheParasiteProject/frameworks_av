@@ -10350,6 +10350,7 @@ binder::Status MmapThreadHandle::standby()
 
 binder::Status MmapThreadHandle::reportData(const ::std::vector<uint8_t>& buffer)
 {
+    ALOGV("%s: SoundDose ThreadHandle reportData: %zu", __func__, buffer.size());
     const size_t frameCount = buffer.size() /
             std::max(mThread->frameSize(), static_cast<size_t>(1));
     const status_t status = mThread->reportData(buffer.data(), frameCount);
@@ -11494,12 +11495,20 @@ status_t MmapPlaybackThread::getPlaybackParameters(media::audio::common::AudioPl
 void MmapPlaybackThread::startMelComputation_l(
         const sp<audio_utils::MelProcessor>& processor)
 {
-    ALOGV("%s: starting mel processor for thread %d", __func__, id());
+    ALOGV("%s(%d): SoundDose starting mel processor %s", __func__, id(),
+            (processor ? "active" : "inactive"));
     mMelProcessor.store(processor);
     if (processor) {
         processor->resume();
     }
-
+    sp<media::IMmapStreamCallback> callback;
+    {
+        audio_utils::lock_guard lock(mutex());
+        callback = mCallback.promote();
+    }
+    if (callback) {
+        callback->onSoundDoseChanged(processor != nullptr);
+    }
     // no need to update output format for MMapPlaybackThread since it is
     // assigned constant for each thread
 }
@@ -11507,10 +11516,17 @@ void MmapPlaybackThread::startMelComputation_l(
 // stopMelComputation_l() must be called with AudioFlinger::mutex() held
 void MmapPlaybackThread::stopMelComputation_l()
 {
-    ALOGV("%s: pausing mel processor for thread %d", __func__, id());
-    auto melProcessor = mMelProcessor.load();
-    if (melProcessor != nullptr) {
+    ALOGV("%s(%d): SoundDose pausing mel processor", __func__, id());
+    if (auto melProcessor = mMelProcessor.load()) {
         melProcessor->pause();
+        sp<media::IMmapStreamCallback> callback;
+        {
+            audio_utils::lock_guard lock(mutex());
+            callback = mCallback.promote();
+        }
+        if (callback) {
+            callback->onSoundDoseChanged(false /* active */);
+        }
     }
 }
 
