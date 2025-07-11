@@ -10242,6 +10242,10 @@ public:
     binder::Status reportData(const ::std::vector<uint8_t>& buffer) final;
     binder::Status drain() final;
     binder::Status activate() final;
+    binder::Status setPlaybackParameters(
+            const media::audio::common::AudioPlaybackRate& rate) final;
+    binder::Status getPlaybackParameters(
+            media::audio::common::AudioPlaybackRate* rate) final;
 private:
     const sp<IAfMmapThread> mThread;
 };
@@ -10359,6 +10363,18 @@ binder::Status MmapThreadHandle::drain() {
 
 binder::Status MmapThreadHandle::activate() {
     const status_t status = mThread->activate();
+    return aidl_utils::binderStatusFromStatusT(status);
+}
+
+binder::Status MmapThreadHandle::setPlaybackParameters(
+        const media::audio::common::AudioPlaybackRate& rate) {
+    const status_t status = mThread->setPlaybackParameters(rate);
+    return aidl_utils::binderStatusFromStatusT(status);
+}
+
+binder::Status MmapThreadHandle::getPlaybackParameters(
+        media::audio::common::AudioPlaybackRate* rate) {
+    const status_t status = mThread->getPlaybackParameters(rate);
     return aidl_utils::binderStatusFromStatusT(status);
 }
 
@@ -10759,6 +10775,17 @@ status_t MmapThread::drain() {
 }
 
 status_t MmapThread::activate() {
+    // This is a stub implementation. The MmapPlaybackThread overrides this function.
+    return INVALID_OPERATION;
+}
+
+status_t MmapThread::setPlaybackParameters(
+        const media::audio::common::AudioPlaybackRate& /*rate*/) {
+    // This is a stub implementation. The MmapPlaybackThread overrides this function.
+    return INVALID_OPERATION;
+}
+
+status_t MmapThread::getPlaybackParameters(media::audio::common::AudioPlaybackRate* /*rate*/) {
     // This is a stub implementation. The MmapPlaybackThread overrides this function.
     return INVALID_OPERATION;
 }
@@ -11437,6 +11464,29 @@ status_t MmapPlaybackThread::drain() {
 
 status_t MmapPlaybackThread::activate() {
     acquireWakeLock();
+    return NO_ERROR;
+}
+
+status_t MmapPlaybackThread::setPlaybackParameters(
+        const media::audio::common::AudioPlaybackRate& rate) {
+    const audio_playback_rate_t legacy = VALUE_OR_RETURN_STATUS(
+            aidl2legacy_AudioPlaybackRate_audio_playback_rate_t(rate));
+    audio_utils::lock_guard lock(mutex());
+    return mOutput->stream->setPlaybackRateParameters(legacy);
+}
+
+status_t MmapPlaybackThread::getPlaybackParameters(media::audio::common::AudioPlaybackRate* rate) {
+    audio_playback_rate_t legacy;
+    {
+        audio_utils::lock_guard lock(mutex());
+        if (status_t status = mOutput->stream->getPlaybackRateParameters(&legacy);
+            status != NO_ERROR) {
+            ALOGE("%s failed, result=%d", __func__, status);
+            return status;
+        }
+    }
+    *rate = VALUE_OR_RETURN_STATUS(
+            legacy2aidl_audio_playback_rate_t_AudioPlaybackRate(legacy));
     return NO_ERROR;
 }
 
