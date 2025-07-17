@@ -33,7 +33,6 @@
 #include <audio_utils/mutex.h>
 #include <audio_utils/FdToString.h>
 #include <audio_utils/SimpleLog.h>
-#include <audio_utils/TimerQueue.h>
 #include <com/android/media/permission/PermissionEnum.h>
 #include <media/IAudioFlinger.h>
 #include <media/IAudioPolicyServiceLocal.h>
@@ -487,9 +486,6 @@ private:
     SimpleLog mThreadLog{16}; // 16 Thread history limit
 
     void dumpToThreadLog_l(const sp<IAfThreadBase>& thread) REQUIRES(mutex());
-
-    // Internally locked timer queue for suspend / wakeup activity.
-    audio_utils::TimerQueue mTimerQueue{true /* alarm */};
 
     // --- Notification Client ---
     class NotificationClient : public IBinder::DeathRecipient {
