@@ -791,9 +791,10 @@ std::unique_ptr<AidlCameraMetadata> MetadataBuilder::build() {
   }
 
   if (mExtendWithAvailableCharacteristicsKeys) {
-    availableKeys.erase(ANDROID_REQUEST_AVAILABLE_CHARACTERISTICS_KEYS);
-    setAvailableCharacteristicKeys(std::vector<camera_metadata_tag_t>(
-        availableKeys.begin(), availableKeys.end()));
+    // update the key for available keys directly in the metadata helper
+    auto v = std::vector<int32_t>(availableKeys.begin(), availableKeys.end());
+    metadataHelper.update(ANDROID_REQUEST_AVAILABLE_CHARACTERISTICS_KEYS,
+                          v.data(), v.size());
   }
 
   ALOGD("%s: Built metadata has number of keys: %zu", __func__,
