@@ -1222,10 +1222,8 @@ void ThreadBase::acquireWakeLock_l()
                     {} /* historyTag */);
         if (status.isOk()) {
             mWakeLockToken = binder;
-            if (media::psh_utils::AudioPowerManager::enabled()) {
-                mThreadToken = media::psh_utils::createAudioThreadToken(
-                        getTid(), String8(getWakeLockTag()).c_str());
-            }
+            mThreadToken = media::psh_utils::createAudioThreadToken(
+                    getTid(), String8(getWakeLockTag()).c_str());
         }
         ALOGV("acquireWakeLock_l() %s status %d", mThreadName, status.exceptionCode());
     }
