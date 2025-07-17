@@ -1803,7 +1803,9 @@ audio_io_handle_t AudioPolicyManager::getOutputForDevices(
     if (stream != AUDIO_STREAM_MUSIC) {
         *flags = (audio_output_flags_t)(*flags &~AUDIO_OUTPUT_FLAG_DEEP_BUFFER);
     } else if (/* stream == AUDIO_STREAM_MUSIC && */
-            *flags == AUDIO_OUTPUT_FLAG_NONE && mConfig->useDeepBufferForMedia()) {
+            *flags == AUDIO_OUTPUT_FLAG_NONE && mConfig->useDeepBufferForMedia()
+            && audio_channel_count_from_out_mask(config->channel_mask) == 2
+            && config->sample_rate <= SAMPLE_RATE_HZ_MAX) {
         // use DEEP_BUFFER as default output for music stream type
         *flags = (audio_output_flags_t)AUDIO_OUTPUT_FLAG_DEEP_BUFFER;
     }
