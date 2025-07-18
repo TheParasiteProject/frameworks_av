@@ -348,6 +348,8 @@ void AudioFlinger::onFirstRef()
     mPatchPanel = IAfPatchPanel::create(sp<IAfPatchPanelCallback>::fromExisting(this));
     mMelReporter = sp<MelReporter>::make(sp<IAfMelReporterCallback>::fromExisting(this),
                                          mPatchPanel);
+
+    ALOGD("%s: TimerQueue %s", __func__, mTimerQueue.ready() ? "ready" : "uninitialized");
 }
 
 status_t AudioFlinger::setAudioHalPids(const std::vector<pid_t>& pids) {
