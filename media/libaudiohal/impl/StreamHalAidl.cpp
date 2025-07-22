@@ -171,14 +171,11 @@ StreamHalAidl::StreamHalAidl(std::string_view className, bool isInput, const aud
 }
 
 StreamHalAidl::~StreamHalAidl() {
-}
-
-status_t StreamHalAidl::close() {
     AUGMENT_LOG(D);
-    if (!mStream) return NO_INIT;
-    ndk::ScopedAStatus status = serializeCall(mStream, &Stream::close);
-    AUGMENT_LOG_IF(E, !status.isOk(), "status %s", status.getDescription().c_str());
-    return statusTFromBinderStatus(status);
+    if (mStream != nullptr) {
+        ndk::ScopedAStatus status = serializeCall(mStream, &Stream::close);
+        AUGMENT_LOG_IF(E, !status.isOk(), "status %s", status.getDescription().c_str());
+    }
 }
 
 status_t StreamHalAidl::getBufferSize(size_t *size) {
@@ -351,8 +348,8 @@ status_t StreamHalAidl::dumpImpl(int fd, const Vector<String16>& args, ::ndk::IC
                 }
         }, pipefd[0], fd);
         status = stream->dump(pipefd[1], Args(newArgs).args(), newArgs.size());
-        ::close(pipefd[1]);
-        ::close(pipefd[0]);
+        close(pipefd[1]);
+        close(pipefd[0]);
         reader.join();
         if (status != OK || !hasOutput) {
             status = mStream->dump(fd, Args(newArgs).args(), newArgs.size());
