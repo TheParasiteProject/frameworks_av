@@ -32,9 +32,6 @@ namespace android {
 class StreamHalInterface : public virtual RefBase
 {
   public:
-    // Closes the HAL stream and releases underlying hardware resources.
-    virtual status_t close() = 0;
-
     // Return size of input/output buffer in bytes for this stream - eg. 4800.
     virtual status_t getBufferSize(size_t *size) = 0;
 
@@ -102,6 +99,7 @@ class StreamHalInterface : public virtual RefBase
     // Subclasses can not be constructed directly by clients.
     StreamHalInterface() {}
 
+    // The destructor automatically closes the stream.
     virtual ~StreamHalInterface() {}
 };
 
