@@ -50,6 +50,9 @@ class DeviceHalHidl;
 class StreamHalHidl : public virtual StreamHalInterface, public CoreConversionHelperHidl
 {
   public:
+    // Closes the HAL stream and releases underlying hardware resources.
+    status_t close() override;
+
     // Return size of input/output buffer in bytes for this stream - eg. 4800.
     virtual status_t getBufferSize(size_t *size);
 
