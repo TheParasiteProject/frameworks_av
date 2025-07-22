@@ -73,6 +73,12 @@ StreamHalHidl::~StreamHalHidl() {
     hardware::IPCThreadState::self()->flushCommands();
 }
 
+status_t StreamHalHidl::close() {
+    TIME_CHECK();
+    if (!mStream) return NO_INIT;
+    return processReturn("close", mStream->close());
+}
+
 status_t StreamHalHidl::getBufferSize(size_t *size) {
     TIME_CHECK();
     if (!mStream) return NO_INIT;
@@ -390,7 +396,6 @@ StreamOutHalHidl::~StreamOutHalHidl() {
                     mStream->setEventCallback(nullptr));
         }
 #endif
-        processReturn("close", mStream->close());
     }
     mCallback = nullptr;
     mEventCallback = nullptr;
@@ -1029,9 +1034,6 @@ StreamInHalHidl::StreamInHalHidl(
 }
 
 StreamInHalHidl::~StreamInHalHidl() {
-    if (mStream != 0) {
-        processReturn("close", mStream->close());
-    }
     if (mEfGroup) {
         EventFlag::deleteEventFlag(&mEfGroup);
     }
