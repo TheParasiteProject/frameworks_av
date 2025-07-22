@@ -160,14 +160,18 @@ status_t MmapStreamInterface::openMmapStream(bool isOutput,
 
     media::OpenMmapResponse response;
     status = af->openMmapStream(request, &response);
+
+    // we always parse the response to fill config to permit retry on error.
+    const status_t responseStatus = parseResponse(
+            response, isOutput, config, deviceIds, sessionId, handle);
+
     if (status != NO_ERROR) {
         ALOGW("%s: openMmapStream failed with status: %d", __func__, status);
         return status;
     }
-    status = parseResponse(response, isOutput, config, deviceIds, sessionId, handle);
-    if (status != NO_ERROR) {
+    if (responseStatus != NO_ERROR) {
         ALOGW("%s: parseResponse failed with status: %d", __func__, status);
-        return status;
+        return responseStatus;
     }
     interface = sp<MmapStreamInterface>::make(*config, response.stream, request.callback);
     return NO_ERROR;
