@@ -124,6 +124,9 @@ class StreamHalHidl : public virtual StreamHalInterface, public CoreConversionHe
 
 class StreamOutHalHidl : public StreamOutHalInterface, public StreamHalHidl {
   public:
+    // Closes the HAL stream and releases underlying hardware resources.
+    status_t close() override;
+
     // Put the audio hardware input/output into standby mode (from StreamHalInterface).
     status_t standby() override;
 

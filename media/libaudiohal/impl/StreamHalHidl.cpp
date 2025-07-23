@@ -386,22 +386,29 @@ StreamOutHalHidl::StreamOutHalHidl(
 }
 
 StreamOutHalHidl::~StreamOutHalHidl() {
+    if (mEfGroup) {
+        EventFlag::deleteEventFlag(&mEfGroup);
+    }
+}
+
+status_t StreamOutHalHidl::close() {
+    status_t status = NO_INIT;
     if (mStream != 0) {
         if (mCallback.load().unsafe_get()) {
+            TIME_CHECK();
             processReturn("clearCallback", mStream->clearCallback());
         }
 #if MAJOR_VERSION >= 6
         if (mEventCallback.load().unsafe_get() != nullptr) {
-            processReturn("setEventCallback",
-                    mStream->setEventCallback(nullptr));
+            TIME_CHECK();
+            processReturn("setEventCallback", mStream->setEventCallback(nullptr));
         }
 #endif
+        status = StreamHalHidl::close();
     }
     mCallback = nullptr;
     mEventCallback = nullptr;
-    if (mEfGroup) {
-        EventFlag::deleteEventFlag(&mEfGroup);
-    }
+    return status;
 }
 
 status_t StreamOutHalHidl::getFrameSize(size_t *size) {
