@@ -17,6 +17,7 @@
 #define LOG_TAG "MmapStreamInterface"
 
 #include <android/media/BnMmapStreamCallback.h>
+#include <media/AidlConversion.h>
 #include <media/AudioSystem.h>
 #include <media/IAudioFlinger.h>
 #include <media/MmapStreamCallback.h>
@@ -68,6 +69,17 @@ public:
     ::android::binder::Status onSoundDoseChanged(bool active) final {
         if (const auto callback = mCallback.promote()) {
             callback->onSoundDoseChanged(active);
+        } else {
+            ALOGW_IF(mCallbackWarn++ < kSpamLimit, "%s: null callback", __func__);
+        }
+        return binder::Status::ok();
+    }
+
+    ::android::binder::Status onWakeUp(const media::TimerQueueHandle& handle) final {
+        if (const auto callback = mCallback.promote()) {
+            audio_utils::TimerQueue::handle_t legacy = VALUE_OR_RETURN_BINDER_STATUS(
+                    aidl2legacy_TimerQueueHandle_timer_queue_handle_t(handle));
+            callback->onWakeUp(legacy);
         } else {
             ALOGW_IF(mCallbackWarn++ < kSpamLimit, "%s: null callback", __func__);
         }
@@ -309,13 +321,20 @@ status_t MmapStreamInterface::reportData(const void* buffer, size_t frameCount) 
     return NO_ERROR;
 }
 
-status_t MmapStreamInterface::drain() {
-    RETURN_STATUS_IF_ERROR(statusTFromBinderStatus(mStream->drain()));
+status_t MmapStreamInterface::drain(int64_t wakeUpNanos, bool allowSoftWakeUp,
+                                    android::audio_utils::TimerQueue::handle_t* handle) {
+    media::TimerQueueHandle aidl;
+    RETURN_STATUS_IF_ERROR(statusTFromBinderStatus(
+            mStream->drain(wakeUpNanos, allowSoftWakeUp, &aidl)));
+    *handle = VALUE_OR_RETURN_STATUS(
+            aidl2legacy_TimerQueueHandle_timer_queue_handle_t(aidl));
     return NO_ERROR;
 }
 
-status_t MmapStreamInterface::activate() {
-    RETURN_STATUS_IF_ERROR(statusTFromBinderStatus(mStream->activate()));
+status_t MmapStreamInterface::activate(android::audio_utils::TimerQueue::handle_t handle) {
+    media::TimerQueueHandle aidl = VALUE_OR_RETURN_STATUS(
+            legacy2aidl_timer_queue_handle_t_TimerQueueHandle(handle));
+    RETURN_STATUS_IF_ERROR(statusTFromBinderStatus(mStream->activate(aidl)));
     return NO_ERROR;
 }
 
