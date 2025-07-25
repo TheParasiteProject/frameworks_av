@@ -1574,6 +1574,65 @@ TEST_F_WITH_FLAGS(AudioPolicyManagerTestWithConfigurationFile,
                                                            "", "", AUDIO_FORMAT_DEFAULT));
 }
 
+TEST_F(AudioPolicyManagerTestWithConfigurationFile, PreferConfigForInputDevice) {
+    mClient->addSupportedFormat(AUDIO_FORMAT_PCM_16_BIT);
+    mClient->addSupportedChannelMask(AUDIO_CHANNEL_IN_MONO);
+    mClient->addSupportedChannelMask(AUDIO_CHANNEL_IN_STEREO);
+    const std::set<audio_channel_mask_t> kChannelMasks =
+            {AUDIO_CHANNEL_IN_STEREO, AUDIO_CHANNEL_IN_MONO};
+    const std::string usbAddress = "card=1;device=0";
+    ASSERT_EQ(NO_ERROR, mManager->setDeviceConnectionState(
+            AUDIO_DEVICE_IN_USB_DEVICE, AUDIO_POLICY_DEVICE_STATE_AVAILABLE,
+            usbAddress.c_str(), "", AUDIO_FORMAT_DEFAULT));
+    audio_port_v7 usbDevicePort;
+    ASSERT_TRUE(findDevicePort(AUDIO_PORT_ROLE_SOURCE, AUDIO_DEVICE_IN_USB_DEVICE,
+                               usbAddress, &usbDevicePort));
+    ASSERT_EQ(1, kChannelMasks.count(usbDevicePort.active_config.channel_mask));
+
+    const audio_port_handle_t requestedDeviceId = usbDevicePort.id;
+    const audio_io_handle_t requestedInput = AUDIO_IO_HANDLE_NONE;
+    const AttributionSourceState attributionSource = createAttributionSourceState(/*uid=*/ 0);
+    AudioPolicyInterface::input_type_t inputType;
+    audio_attributes_t attr = {AUDIO_CONTENT_TYPE_UNKNOWN, AUDIO_USAGE_UNKNOWN,
+                               AUDIO_SOURCE_VOICE_COMMUNICATION, AUDIO_FLAG_NONE, ""};
+    audio_channel_mask_t requestedChannelMask = AUDIO_CHANNEL_IN_MONO;
+    if (requestedChannelMask == usbDevicePort.active_config.channel_mask) {
+        requestedChannelMask = AUDIO_CHANNEL_IN_STEREO;
+    }
+    audio_config_base_t requestedConfig = {
+            .sample_rate = k48000SamplingRate,
+            .channel_mask = requestedChannelMask,
+            .format = AUDIO_FORMAT_PCM_16_BIT,
+    };
+    auto inputRes = mManager->getInputForAttr(
+            attr, requestedInput, requestedDeviceId, requestedConfig, AUDIO_INPUT_FLAG_NONE,
+            1 /*riid*/, AUDIO_SESSION_NONE, attributionSource);
+
+    ASSERT_TRUE(inputRes.has_value());
+    ASSERT_NE(inputRes->portId, AUDIO_PORT_HANDLE_NONE);
+    ASSERT_EQ(requestedDeviceId,inputRes->selectedDeviceId);
+
+    // The input is using a different channel mask from the default one for the device.
+    // After the client starts, the device should use the same configuration as the client.
+    ASSERT_EQ(NO_ERROR, mManager->startInput(inputRes->portId));
+    audio_port_v7 usbDevicePort2;
+    ASSERT_TRUE(findDevicePort(AUDIO_PORT_ROLE_SOURCE, AUDIO_DEVICE_IN_USB_DEVICE,
+                               usbAddress, &usbDevicePort2));
+    ASSERT_EQ(requestedChannelMask, usbDevicePort2.active_config.channel_mask);
+
+    // After the client is released, the device should reuse the default configuration.
+    ASSERT_EQ(NO_ERROR, mManager->stopInput(inputRes->portId));
+    mManager->releaseInput(inputRes->portId);
+    audio_port_v7 usbDevicePort3;
+    ASSERT_TRUE(findDevicePort(AUDIO_PORT_ROLE_SOURCE, AUDIO_DEVICE_IN_USB_DEVICE,
+                               usbAddress, &usbDevicePort3));
+    ASSERT_EQ(usbDevicePort.active_config.channel_mask, usbDevicePort3.active_config.channel_mask);
+
+    ASSERT_EQ(NO_ERROR, mManager->setDeviceConnectionState(AUDIO_DEVICE_IN_USB_DEVICE,
+                                                           AUDIO_POLICY_DEVICE_STATE_UNAVAILABLE,
+                                                           "", "", AUDIO_FORMAT_DEFAULT));
+}
+
 class AudioPolicyManagerTestDynamicPolicy : public AudioPolicyManagerTestWithConfigurationFile {
 protected:
     void TearDown() override;
