@@ -670,8 +670,9 @@ TEST_P(AudioPolicyManagerTestMsd, PatchCreationSetReleaseMsdOutputPatches) {
 TEST_P(AudioPolicyManagerTestMsd, GetOutputForAttrEncodedRoutesToMsd) {
     const PatchCountCheck patchCount = snapshotPatchCount();
     DeviceIdVector selectedDeviceIds;
-    getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_AC3, AUDIO_CHANNEL_OUT_5POINT1,
-            k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT);
+    ASSERT_NO_FATAL_FAILURE(
+            getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_AC3, AUDIO_CHANNEL_OUT_5POINT1,
+            k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT));
     ASSERT_EQ(mDefaultOutputDevice->getId(), selectedDeviceIds[0]);
     ASSERT_EQ(mExpectedAudioPatchCount, patchCount.deltaFromSnapshot());
 }
@@ -679,8 +680,9 @@ TEST_P(AudioPolicyManagerTestMsd, GetOutputForAttrEncodedRoutesToMsd) {
 TEST_P(AudioPolicyManagerTestMsd, GetOutputForAttrPcmRoutesToMsd) {
     const PatchCountCheck patchCount = snapshotPatchCount();
     DeviceIdVector selectedDeviceIds;
-    getOutputForAttr(&selectedDeviceIds,
-            AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO, k48000SamplingRate);
+    ASSERT_NO_FATAL_FAILURE(
+            getOutputForAttr(&selectedDeviceIds,
+            AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO, k48000SamplingRate));
     ASSERT_EQ(mDefaultOutputDevice->getId(), selectedDeviceIds[0]);
     ASSERT_EQ(mExpectedAudioPatchCount - 1, patchCount.deltaFromSnapshot());
 }
@@ -688,13 +690,14 @@ TEST_P(AudioPolicyManagerTestMsd, GetOutputForAttrPcmRoutesToMsd) {
 TEST_P(AudioPolicyManagerTestMsd, GetOutputForAttrEncodedPlusPcmRoutesToMsd) {
     const PatchCountCheck patchCount = snapshotPatchCount();
     DeviceIdVector selectedDeviceIds;
-    getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_AC3, AUDIO_CHANNEL_OUT_5POINT1,
-            k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT);
+    ASSERT_NO_FATAL_FAILURE(
+            getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_AC3, AUDIO_CHANNEL_OUT_5POINT1,
+            k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT));
     ASSERT_EQ(mDefaultOutputDevice->getId(), selectedDeviceIds[0]);
     ASSERT_EQ(mExpectedAudioPatchCount, patchCount.deltaFromSnapshot());
     selectedDeviceIds.clear();
-    getOutputForAttr(&selectedDeviceIds,
-            AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO, k48000SamplingRate);
+    ASSERT_NO_FATAL_FAILURE(getOutputForAttr(&selectedDeviceIds,
+            AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO, k48000SamplingRate));
     ASSERT_EQ(mDefaultOutputDevice->getId(), selectedDeviceIds[0]);
     ASSERT_EQ(mExpectedAudioPatchCount, patchCount.deltaFromSnapshot());
 }
@@ -702,8 +705,9 @@ TEST_P(AudioPolicyManagerTestMsd, GetOutputForAttrEncodedPlusPcmRoutesToMsd) {
 TEST_P(AudioPolicyManagerTestMsd, GetOutputForAttrUnsupportedFormatBypassesMsd) {
     const PatchCountCheck patchCount = snapshotPatchCount();
     DeviceIdVector selectedDeviceIds;
-    getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_DTS, AUDIO_CHANNEL_OUT_5POINT1,
-            k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT);
+    ASSERT_NO_FATAL_FAILURE(
+            getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_DTS, AUDIO_CHANNEL_OUT_5POINT1,
+            k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT));
     ASSERT_NE(mMsdOutputDevice->getId(), selectedDeviceIds[0]);
     ASSERT_EQ(1, patchCount.deltaFromSnapshot());
 }
@@ -714,8 +718,9 @@ TEST_P(AudioPolicyManagerTestMsd, GetOutputForAttrFormatSwitching) {
         const PatchCountCheck patchCount = snapshotPatchCount();
         DeviceIdVector selectedDeviceIds;
         audio_port_handle_t portId;
-        getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_AC3, AUDIO_CHANNEL_OUT_5POINT1,
-                k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT, nullptr /*output*/, &portId);
+        ASSERT_NO_FATAL_FAILURE(
+                getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_AC3, AUDIO_CHANNEL_OUT_5POINT1,
+                k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT, nullptr /*output*/, &portId));
         ASSERT_EQ(mDefaultOutputDevice->getId(), selectedDeviceIds[0]);
         ASSERT_EQ(mExpectedAudioPatchCount, patchCount.deltaFromSnapshot());
         mManager->releaseOutput(portId);
@@ -725,8 +730,9 @@ TEST_P(AudioPolicyManagerTestMsd, GetOutputForAttrFormatSwitching) {
         const PatchCountCheck patchCount = snapshotPatchCount();
         DeviceIdVector selectedDeviceIds;
         audio_port_handle_t portId;
-        getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_DTS, AUDIO_CHANNEL_OUT_5POINT1,
-                k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT, nullptr /*output*/, &portId);
+        ASSERT_NO_FATAL_FAILURE(
+                getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_DTS, AUDIO_CHANNEL_OUT_5POINT1,
+                k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT, nullptr /*output*/, &portId));
         ASSERT_GT(selectedDeviceIds.size(), 0);
         ASSERT_NE(mMsdOutputDevice->getId(), selectedDeviceIds[0]);
         ASSERT_EQ(-static_cast<int>(mExpectedAudioPatchCount) + 2, patchCount.deltaFromSnapshot());
@@ -736,8 +742,9 @@ TEST_P(AudioPolicyManagerTestMsd, GetOutputForAttrFormatSwitching) {
     {
         const PatchCountCheck patchCount = snapshotPatchCount();
         DeviceIdVector selectedDeviceIds;
-        getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_AC3, AUDIO_CHANNEL_OUT_5POINT1,
-                k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT);
+        ASSERT_NO_FATAL_FAILURE(
+                getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_AC3, AUDIO_CHANNEL_OUT_5POINT1,
+                k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT));
         ASSERT_EQ(mDefaultOutputDevice->getId(), selectedDeviceIds[0]);
         ASSERT_EQ(1, patchCount.deltaFromSnapshot());
     }
@@ -1162,16 +1169,18 @@ TEST_F(AudioPolicyManagerTestWithConfigurationFile, RoutingChangedWithPreferredM
     audio_io_handle_t output = AUDIO_IO_HANDLE_NONE;
     DeviceIdVector selectedDeviceIds;
     audio_port_handle_t portId = AUDIO_PORT_HANDLE_NONE;
-    getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
+    ASSERT_NO_FATAL_FAILURE(
+            getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
             k48000SamplingRate, AUDIO_OUTPUT_FLAG_NONE, &output, &portId, mediaAttr,
-            AUDIO_SESSION_NONE, uid);
+            AUDIO_SESSION_NONE, uid));
     bool muted{};
     float volume{};
     status_t status = mManager->startOutput(portId, &volume, &muted);
     if (status == DEAD_OBJECT) {
-        getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
-                k48000SamplingRate, AUDIO_OUTPUT_FLAG_NONE, &output, &portId, mediaAttr,
-                AUDIO_SESSION_NONE, uid);
+        ASSERT_NO_FATAL_FAILURE(getOutputForAttr(
+                        &selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
+                        k48000SamplingRate, AUDIO_OUTPUT_FLAG_NONE, &output, &portId, mediaAttr,
+                        AUDIO_SESSION_NONE, uid));
         status = mManager->startOutput(portId, &volume, &muted);
     }
     EXPECT_EQ(NO_ERROR, status);
@@ -1466,9 +1475,10 @@ TEST_F(AudioPolicyManagerTestWithConfigurationFile, SelectMMapOffloadOnlyWhenReq
         // Use preferred device to ensure usb is selected so that mmap mix port can be used
         DeviceIdVector selectedDeviceIds = {usbPortId};
         audio_port_handle_t portId;
-        getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
-                         k48000SamplingRate, static_cast<audio_output_flags_t>(flags), &output,
-                         &portId);
+        ASSERT_NO_FATAL_FAILURE(getOutputForAttr(
+                        &selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
+                        k48000SamplingRate, static_cast<audio_output_flags_t>(flags), &output,
+                        &portId));
         EXPECT_NE(AUDIO_IO_HANDLE_NONE, output);
         sp<SwAudioOutputDescriptor> outDesc = mManager->getOutputs().valueFor(output);
         ASSERT_NE(nullptr, outDesc.get());
@@ -1518,9 +1528,10 @@ TEST_F_WITH_FLAGS(AudioPolicyManagerTestWithConfigurationFile,
         // Use preferred device to ensure usb is selected so that mmap mix port can be used
         DeviceIdVector selectedDeviceIds = {usbPortId};
         audio_port_handle_t portId1;
-        getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
-                         k48000SamplingRate, static_cast<audio_output_flags_t>(flagsPair.first),
-                         &output1, &portId1);
+        ASSERT_NO_FATAL_FAILURE(getOutputForAttr(
+                        &selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
+                        k48000SamplingRate, static_cast<audio_output_flags_t>(flagsPair.first),
+                        &output1, &portId1));
         EXPECT_NE(AUDIO_IO_HANDLE_NONE, output1);
         if (output1 == AUDIO_IO_HANDLE_NONE) {
             break;
@@ -1532,9 +1543,10 @@ TEST_F_WITH_FLAGS(AudioPolicyManagerTestWithConfigurationFile,
         // Request with same output flags will get the same output.
         audio_io_handle_t output2 = AUDIO_IO_HANDLE_NONE;
         audio_port_handle_t portId2;
-        getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
-                         k48000SamplingRate, static_cast<audio_output_flags_t>(flagsPair.first),
-                         &output2, &portId2);
+        ASSERT_NO_FATAL_FAILURE(getOutputForAttr(
+                        &selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
+                        k48000SamplingRate, static_cast<audio_output_flags_t>(flagsPair.first),
+                        &output2, &portId2));
         EXPECT_EQ(output1, output2);
         mManager->releaseOutput(portId2);
 
@@ -2269,9 +2281,11 @@ TEST_P(AudioPolicyManagerTestDPPlaybackReRouting, PlaybackReRouting) {
     const audio_attributes_t& attr = param.attributes;
 
     DeviceIdVector playbackRoutedPortIds;
-    getOutputForAttr(&playbackRoutedPortIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
-            k48000SamplingRate, AUDIO_OUTPUT_FLAG_NONE, nullptr /*output*/, nullptr /*portId*/,
-            attr, param.session);
+    ASSERT_NO_FATAL_FAILURE(getOutputForAttr(&playbackRoutedPortIds, AUDIO_FORMAT_PCM_16_BIT,
+                    AUDIO_CHANNEL_OUT_STEREO, k48000SamplingRate,
+                    AUDIO_OUTPUT_FLAG_NONE,
+                    nullptr /*output*/, nullptr /*portId*/,
+                    attr, param.session));
     if (param.expected_match) {
         ASSERT_EQ(mInjectionPort.id, playbackRoutedPortIds[0]);
     } else {
@@ -2614,8 +2628,9 @@ void AudioPolicyManagerTestDPMixRecordInjection::SetUp() {
             {AUDIO_CONTENT_TYPE_UNKNOWN, usage, AUDIO_SOURCE_DEFAULT, AUDIO_FLAG_NONE, ""};
     std::string tags = std::string("addr=") + mMixAddress;
     strncpy(attr.tags, tags.c_str(), AUDIO_ATTRIBUTES_TAGS_MAX_SIZE - 1);
-    getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
-            k48000SamplingRate, AUDIO_OUTPUT_FLAG_NONE, nullptr /*output*/, &mPortId, attr);
+    ASSERT_NO_FATAL_FAILURE(
+            getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
+            k48000SamplingRate, AUDIO_OUTPUT_FLAG_NONE, nullptr /*output*/, &mPortId, attr));
     bool muted{};
     float volume{};
     ASSERT_EQ(NO_ERROR, mManager->startOutput(mPortId, &volume, &muted));
@@ -2819,8 +2834,9 @@ TEST_P(AudioPolicyManagerTestDeviceConnection, ExplicitlyRoutingAfterConnection)
     // Try start input or output according to the device type
     if (audio_is_output_devices(type)) {
         DeviceIdVector routedPortIds = { devicePort.id };
-        getOutputForAttr(&routedPortIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
-                k48000SamplingRate, AUDIO_OUTPUT_FLAG_NONE);
+        ASSERT_NO_FATAL_FAILURE(getOutputForAttr(
+                        &routedPortIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
+                        k48000SamplingRate, AUDIO_OUTPUT_FLAG_NONE));
         ASSERT_EQ(devicePort.id, routedPortIds[0]);
     } else if (audio_is_input_device(type)) {
         audio_port_handle_t routedPortId = devicePort.id;
@@ -3096,8 +3112,9 @@ TEST_F(AudioPolicyManagerCarTest, GetOutputForAttrAtmosOutputAfterRegisteringPol
     DeviceIdVector selectedDeviceIds;
     audio_io_handle_t output;
     audio_port_handle_t portId;
-    getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_E_AC3_JOC, AUDIO_CHANNEL_OUT_5POINT1,
-            k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId);
+    ASSERT_NO_FATAL_FAILURE(getOutputForAttr(
+                    &selectedDeviceIds, AUDIO_FORMAT_E_AC3_JOC, AUDIO_CHANNEL_OUT_5POINT1,
+                    k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId));
     ASSERT_GT(selectedDeviceIds.size(), 0);
     sp<SwAudioOutputDescriptor> outDesc = mManager->getOutputs().valueFor(output);
     ASSERT_NE(nullptr, outDesc.get());
@@ -3108,8 +3125,9 @@ TEST_F(AudioPolicyManagerCarTest, GetOutputForAttrAtmosOutputAfterRegisteringPol
     selectedDeviceIds.clear();
     output = AUDIO_IO_HANDLE_NONE;
     portId = AUDIO_PORT_HANDLE_NONE;
-    getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_7POINT1POINT4,
-            k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId);
+    ASSERT_NO_FATAL_FAILURE(getOutputForAttr(
+                    &selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_7POINT1POINT4,
+                    k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId));
     ASSERT_GT(selectedDeviceIds.size(), 0);
     outDesc = mManager->getOutputs().valueFor(output);
     ASSERT_NE(nullptr, outDesc.get());
@@ -3145,8 +3163,9 @@ TEST_F(AudioPolicyManagerCarTest, GetOutputForAttrAfterRegisteringPolicyMix) {
             AUDIO_CONTENT_TYPE_UNKNOWN, AUDIO_USAGE_MEDIA,
             AUDIO_SOURCE_DEFAULT, AUDIO_FLAG_NONE, ""};
 
-    getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
-            k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId, mediaAttribute);
+    ASSERT_NO_FATAL_FAILURE(getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT,
+                    AUDIO_CHANNEL_OUT_STEREO, k48000SamplingRate,
+                    AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId, mediaAttribute));
 
     ASSERT_EQ(mediaDevicePort.id, selectedDeviceIds[0]);
 }
@@ -3178,8 +3197,9 @@ TEST_F(AudioPolicyManagerCarTest, GetOutputForAttrWithSelectedOutputAfterRegiste
             AUDIO_CONTENT_TYPE_UNKNOWN, AUDIO_USAGE_MEDIA,
             AUDIO_SOURCE_DEFAULT, AUDIO_FLAG_NONE, ""};
 
-    getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
-            k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId, mediaAttribute);
+    ASSERT_NO_FATAL_FAILURE(getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT,
+                    AUDIO_CHANNEL_OUT_STEREO, k48000SamplingRate,
+                    AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId, mediaAttribute));
 
     ASSERT_EQ(navDevicePort.id, selectedDeviceIds[0]);
 }
@@ -3214,8 +3234,9 @@ TEST_F(AudioPolicyManagerCarTest, GetOutputForAttrWithSelectedOutputAfterUserAff
                 AUDIO_CONTENT_TYPE_UNKNOWN, AUDIO_USAGE_MEDIA,
                 AUDIO_SOURCE_DEFAULT, AUDIO_FLAG_NONE, ""};
 
-    getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
-            k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId, mediaAttribute);
+    ASSERT_NO_FATAL_FAILURE(getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT,
+                    AUDIO_CHANNEL_OUT_STEREO, k48000SamplingRate,
+                    AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId, mediaAttribute));
 
     ASSERT_GT(selectedDeviceIds.size(), 0);
     ASSERT_NE(navDevicePort.id, selectedDeviceIds[0]);
@@ -3249,8 +3270,9 @@ TEST_F(AudioPolicyManagerCarTest, GetOutputForAttrWithExcludeUserIdCriteria) {
             AUDIO_SOURCE_DEFAULT, AUDIO_FLAG_NONE, ""};
     DeviceIdVector selectedDeviceIds;
 
-    getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
-            k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId, navigationAttribute);
+    ASSERT_NO_FATAL_FAILURE(getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT,
+                    AUDIO_CHANNEL_OUT_STEREO, k48000SamplingRate,
+                    AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId, navigationAttribute));
 
     ASSERT_GT(selectedDeviceIds.size(), 0);
     ASSERT_NE(navDevicePort.id, selectedDeviceIds[0]);
@@ -3284,8 +3306,9 @@ TEST_F(AudioPolicyManagerCarTest, GetOutputForAttrWithSelectedOutputExcludeUserI
             AUDIO_CONTENT_TYPE_UNKNOWN, AUDIO_USAGE_MEDIA,
             AUDIO_SOURCE_DEFAULT, AUDIO_FLAG_NONE, ""};
 
-    getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
-            k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId, mediaAttribute);
+    ASSERT_NO_FATAL_FAILURE(getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT,
+                    AUDIO_CHANNEL_OUT_STEREO, k48000SamplingRate,
+                    AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId, mediaAttribute));
 
     ASSERT_EQ(navDevicePort.id, selectedDeviceIds[0]);
 }
@@ -3322,8 +3345,9 @@ TEST_F(AudioPolicyManagerCarTest,
             AUDIO_CONTENT_TYPE_UNKNOWN, AUDIO_USAGE_MEDIA,
             AUDIO_SOURCE_DEFAULT, AUDIO_FLAG_NONE, ""};
 
-    getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
-            k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId, mediaAttribute);
+    ASSERT_NO_FATAL_FAILURE(getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT,
+                    AUDIO_CHANNEL_OUT_STEREO, k48000SamplingRate,
+                    AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId, mediaAttribute));
 
     ASSERT_EQ(navDevicePort.id, selectedDeviceIds[0]);
 }
@@ -3360,8 +3384,9 @@ TEST_F(AudioPolicyManagerCarTest,
             AUDIO_CONTENT_TYPE_UNKNOWN, AUDIO_USAGE_ALARM,
             AUDIO_SOURCE_DEFAULT, AUDIO_FLAG_NONE, ""};
 
-    getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
-            k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId, alarmAttribute);
+    ASSERT_NO_FATAL_FAILURE(getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT,
+                    AUDIO_CHANNEL_OUT_STEREO, k48000SamplingRate,
+                    AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId, alarmAttribute));
 
     ASSERT_EQ(navDevicePort.id, selectedDeviceIds[0]);
 }
@@ -3398,9 +3423,10 @@ TEST_F(AudioPolicyManagerCarTest,
             AUDIO_SOURCE_DEFAULT, AUDIO_FLAG_NONE, ""};
     uid_t user11AppUid = multiuser_get_uid(/* user_id */ 11, /* app_id */ 12345);
 
-    getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
-            k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId, mediaAttribute,
-            AUDIO_SESSION_NONE, user11AppUid);
+    ASSERT_NO_FATAL_FAILURE(getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT,
+                    AUDIO_CHANNEL_OUT_STEREO, k48000SamplingRate,
+                    AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId, mediaAttribute,
+                    AUDIO_SESSION_NONE, user11AppUid));
 
     ASSERT_EQ(primaryZoneDevicePort.id, selectedDeviceIds[0]);
 }
@@ -3440,9 +3466,10 @@ TEST_F(AudioPolicyManagerCarTest,
             AUDIO_SOURCE_DEFAULT, AUDIO_FLAG_NONE, ""};
     uid_t user11AppUid = multiuser_get_uid(/* user_id */ 11, /* app_id */ 12345);
 
-    getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
-            k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId, mediaAttribute,
-            AUDIO_SESSION_NONE, user11AppUid);
+    ASSERT_NO_FATAL_FAILURE(getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT,
+                    AUDIO_CHANNEL_OUT_STEREO, k48000SamplingRate,
+                    AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId, mediaAttribute,
+                    AUDIO_SESSION_NONE, user11AppUid));
 
     ASSERT_EQ(secondaryZoneDevicePort.id, selectedDeviceIds[0]);
 }
@@ -3485,9 +3512,10 @@ TEST_F(AudioPolicyManagerCarTest,
             AUDIO_SOURCE_DEFAULT, AUDIO_FLAG_NONE, ""};
     uid_t user15AppUid = multiuser_get_uid(/* user_id */ 15, /* app_id */ 12345);
 
-    getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
-            k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId, mediaAttribute,
-            AUDIO_SESSION_NONE, user15AppUid);
+    ASSERT_NO_FATAL_FAILURE(getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT,
+                    AUDIO_CHANNEL_OUT_STEREO, k48000SamplingRate,
+                    AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId, mediaAttribute,
+                    AUDIO_SESSION_NONE, user15AppUid));
 
     ASSERT_EQ(tertiaryZoneDevicePort.id, selectedDeviceIds[0]);
 }
@@ -3523,8 +3551,9 @@ TEST_F(AudioPolicyManagerCarTest, GetOutputForAttrWithNoMatchingMix) {
             AUDIO_CONTENT_TYPE_UNKNOWN, AUDIO_USAGE_ALARM,
             AUDIO_SOURCE_DEFAULT, AUDIO_FLAG_NONE, ""};
 
-    getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
-            k48000SamplingRate, AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId, alarmAttribute);
+    ASSERT_NO_FATAL_FAILURE(getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT,
+                    AUDIO_CHANNEL_OUT_STEREO, k48000SamplingRate,
+                    AUDIO_OUTPUT_FLAG_DIRECT, &output, &portId, alarmAttribute));
 
     ASSERT_EQ(navDevicePort.id, selectedDeviceIds[0]);
 }
@@ -3551,11 +3580,11 @@ TEST_F(AudioPolicyManagerCarTest, GetOutputForAttrForMMapWithPolicyMatched) {
             AUDIO_CONTENT_TYPE_UNKNOWN, AUDIO_USAGE_MEDIA,
             AUDIO_SOURCE_DEFAULT, AUDIO_FLAG_NONE, ""};
 
-    getOutputForAttr(
+    ASSERT_NO_FATAL_FAILURE(getOutputForAttr(
             &selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
             k48000SamplingRate,
             (audio_output_flags_t)(AUDIO_OUTPUT_FLAG_MMAP_NOIRQ | AUDIO_OUTPUT_FLAG_DIRECT),
-            &output, &portId, mediaAttribute);
+            &output, &portId, mediaAttribute));
 
     ASSERT_EQ(mmapDevicePort.id, selectedDeviceIds[0]);
 
@@ -3581,8 +3610,9 @@ void AudioPolicyManagerTVTest::testHDMIPortSelection(
     DeviceIdVector selectedDeviceIds;
     audio_io_handle_t output;
     audio_port_handle_t portId;
-    getOutputForAttr(&selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
-            k48000SamplingRate, flags, &output, &portId);
+    ASSERT_NO_FATAL_FAILURE(getOutputForAttr(
+                    &selectedDeviceIds, AUDIO_FORMAT_PCM_16_BIT, AUDIO_CHANNEL_OUT_STEREO,
+                    k48000SamplingRate, flags, &output, &portId));
     sp<SwAudioOutputDescriptor> outDesc = mManager->getOutputs().valueFor(output);
     ASSERT_NE(nullptr, outDesc.get());
     audio_port_v7 port = {};
@@ -3674,8 +3704,9 @@ void AudioPolicyManagerPhoneTest::testOutputMixPortSelectionForAttr(
         attr.content_type = AUDIO_CONTENT_TYPE_MUSIC;
         attr.usage = AUDIO_USAGE_MEDIA;
     }
-    getOutputForAttr(&selectedDeviceIds, format, AUDIO_CHANNEL_OUT_STEREO, samplingRate, flags,
-            &output, &portId, attr);
+    ASSERT_NO_FATAL_FAILURE(getOutputForAttr(
+                    &selectedDeviceIds, format, AUDIO_CHANNEL_OUT_STEREO, samplingRate, flags,
+                    &output, &portId, attr));
     EXPECT_NO_FATAL_FAILURE(verifyMixPortNameAndFlags(output, expectedMixPortName));
     mManager->releaseOutput(portId);
 }
