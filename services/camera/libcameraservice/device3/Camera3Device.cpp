@@ -295,7 +295,7 @@ status_t Camera3Device::disconnectImpl() {
     ATRACE_CALL();
     Mutex::Autolock il(mInterfaceLock);
 
-    ALOGI("%s: E", __FUNCTION__);
+    ALOGV("%s: E", __FUNCTION__);
 
     status_t res = OK;
     std::vector<wp<Camera3StreamInterface>> streams;
@@ -392,7 +392,7 @@ status_t Camera3Device::disconnectImpl() {
                     __FUNCTION__, stream->getId(), stream->getStrongCount() - 1);
         }
     }
-    ALOGI("%s: X", __FUNCTION__);
+    ALOGV("%s: X", __FUNCTION__);
 
     if (mCameraServiceWatchdog != NULL) {
         mCameraServiceWatchdog->requestExit();
@@ -2706,7 +2706,7 @@ status_t Camera3Device::configureStreamsLocked(int operatingMode,
             ALOGW("Can't set realtime priority for request processing thread: %s (%d)",
                     strerror(-res), res);
         } else {
-            ALOGD("Set real time priority for request queue thread (tid %d)", requestThreadTid);
+            ALOGV("Set real time priority for request queue thread (tid %d)", requestThreadTid);
         }
     }
 
