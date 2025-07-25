@@ -2042,6 +2042,8 @@ void Camera3Device::notifyStatus(bool idle) {
     if (res != OK) {
         SET_ERR("Camera access permission lost mid-operation: %s (%d)",
                 strerror(-res), res);
+        // Drop frames for all streams so that they don't leak to the clients.
+        dropAllStreamBuffers();
     }
 }
 
@@ -2171,6 +2173,18 @@ status_t Camera3Device::dropStreamBuffers(bool dropping, int streamId) {
         mSessionStatsBuilder.startCounter(streamId);
     }
     return stream->dropBuffers(dropping);
+}
+
+void Camera3Device::dropAllStreamBuffers() {
+    Mutex::Autolock l(mLock);
+
+    for (auto streamId : mOutputStreams.getStreamIds()) {
+        auto stream = mOutputStreams.get(streamId);
+        if (stream != nullptr) {
+            mSessionStatsBuilder.stopCounter(streamId);
+            stream->dropBuffers(true /*dropping*/);
+        }
+    }
 }
 
 /**
