@@ -600,8 +600,8 @@ aaudio_result_t AudioStreamInternalPlay::flushFromFrame_l(
         if (accuracy == AAUDIO_FLUSH_FROM_FRAME_ACCURATE && actualPosition != *position) {
             result = AAUDIO_ERROR_OUT_OF_RANGE;
         }
+        *position = actualPosition;
         if (result != AAUDIO_OK) {
-            *position = actualPosition;
             return result;
         }
 
