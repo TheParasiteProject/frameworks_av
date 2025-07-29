@@ -726,7 +726,7 @@ void *AudioStreamInternalPlay::callbackLoop() {
                                       [this]() REQUIRES(mStreamMutex) {
                     return !mOffloadEosPending;
                 });
-                if (mOffloadEosPending) {
+                if (mOffloadEosPending || android::elapsedRealtimeNano() >= wakeUpNanos) {
                     maybeCallPresentationEndCallback();
                     mOffloadEosPending = false;
                 }
