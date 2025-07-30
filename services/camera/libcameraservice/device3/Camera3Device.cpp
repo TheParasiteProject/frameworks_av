@@ -2856,6 +2856,11 @@ void Camera3Device::setErrorStateV(const char *fmt, va_list args) {
     setErrorStateLockedV(fmt, args);
 }
 
+bool Camera3Device::isInErrorState() {
+    Mutex::Autolock l(mLock);
+    return mStatus == STATUS_ERROR;
+}
+
 void Camera3Device::setErrorStateLocked(const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
@@ -3767,13 +3772,17 @@ bool Camera3Device::RequestThread::threadLoop() {
         if (res == OK) {
             sp<Camera3Device> parent = mParent.promote();
             if (parent != nullptr) {
-                if (parent->reconfigureCamera(mLatestSessionParams, mStatusId)) {
-                    mReconfigured = true;
+                auto reconfigured = parent->reconfigureCamera(mLatestSessionParams, mStatusId);
+                if (parent->isInErrorState()) {
+                    ALOGE("%s: Failed to reconfigure camera due to device error!", __FUNCTION__);
+                    cleanUpFailedRequests(/*sendRequestError*/ false);
+                    return false;
                 }
+                mReconfigured = reconfigured;
             }
 
             if (mNextRequests[0].captureRequest->mInputStream != nullptr) {
-                mNextRequests[0].captureRequest->mInputStream->restoreConfiguredState();
+                res = mNextRequests[0].captureRequest->mInputStream->restoreConfiguredState();
                 if (res != OK) {
                     ALOGE("%s: Failed to restore configured input stream: %d", __FUNCTION__, res);
                     cleanUpFailedRequests(/*sendRequestError*/ false);

@@ -935,6 +935,8 @@ class Camera3Device :
     void               setErrorStateV(const char *fmt, va_list args);
     void               setErrorStateLockedV(const char *fmt, va_list args);
 
+    bool               isInErrorState();
+
     /////////////////////////////////////////////////////////////////////
     // Implements InflightRequestUpdateInterface
 
