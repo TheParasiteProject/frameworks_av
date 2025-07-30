@@ -1515,6 +1515,9 @@ class Camera3Device :
     // b/79972865
     Mutex mTrackerLock;
 
+    // Drop buffers for all streams
+    void dropAllStreamBuffers();
+
     // Whether HAL request buffers through requestStreamBuffers API
     bool mUseHalBufManager = false;
     std::set<int32_t > mHalBufManagedStreamIds;
