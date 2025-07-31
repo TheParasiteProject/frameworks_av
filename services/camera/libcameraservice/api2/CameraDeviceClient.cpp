@@ -102,7 +102,7 @@ CameraDeviceClient::CameraDeviceClient(
       mOriginalCameraId(originalCameraId),
       mIsVendorClient(isVendorClient) {
     ATRACE_CALL();
-    ALOGI("CameraDeviceClient %s: Opened", cameraId.c_str());
+    ALOGV("CameraDeviceClient %s: Opened", cameraId.c_str());
 }
 
 status_t CameraDeviceClient::initialize(sp<CameraProviderManager> manager,
