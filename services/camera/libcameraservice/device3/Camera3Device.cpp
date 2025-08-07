@@ -57,6 +57,7 @@
 #include <android-base/properties.h>
 #include <android/hardware/camera/device/3.7/ICameraInjectionSession.h>
 #include <android/hardware/camera2/ICameraDeviceUser.h>
+#include <android/content/res/CameraCompatibilityInfo.h>
 #include <com_android_internal_camera_flags.h>
 #include <com_android_window_flags.h>
 
@@ -101,7 +102,7 @@ bool shouldInjectFakeStream(const CameraMetadata& info) {
 
 Camera3Device::Camera3Device(std::shared_ptr<CameraServiceProxyWrapper>& cameraServiceProxyWrapper,
         std::shared_ptr<AttributionAndPermissionUtils> attributionAndPermissionUtils,
-        const std::string &id, bool overrideForPerfClass, int rotationOverride,
+        const std::string &id, bool overrideForPerfClass, const CameraCompatibilityInfo& compatInfo,
         bool isVendorClient, bool legacyClient):
         AttributionAndPermissionUtilsEncapsulator(attributionAndPermissionUtils),
         mCameraServiceProxyWrapper(cameraServiceProxyWrapper),
@@ -129,7 +130,7 @@ Camera3Device::Camera3Device(std::shared_ptr<CameraServiceProxyWrapper>& cameraS
         mLastTemplateId(-1),
         mNeedFixupMonochromeTags(false),
         mOverrideForPerfClass(overrideForPerfClass),
-        mRotationOverride(rotationOverride),
+        mCompatInfo(compatInfo),
         mRotateAndCropOverride(ANDROID_SCALER_ROTATE_AND_CROP_NONE),
         mComposerOutput(false),
         mAutoframingOverride(ANDROID_CONTROL_AUTOFRAMING_OFF),
@@ -208,7 +209,7 @@ status_t Camera3Device::initializeCommonLocked(sp<CameraProviderManager> manager
     /** Start up request queue thread */
     mRequestThread = createNewRequestThread(
             this, mStatusTracker, mInterface, sessionParamKeys,
-            mUseHalBufManager, mSupportCameraMute, mRotationOverride,
+            mUseHalBufManager, mSupportCameraMute, mCompatInfo,
             mSupportZoomOverride);
     res = mRequestThread->run((std::string("C3Dev-") + mId + "-ReqQueue").c_str());
     if (res != OK) {
@@ -1449,7 +1450,7 @@ status_t Camera3Device::filterParamsAndConfigureLocked(const CameraMetadata& par
                 request->mRotateAndCropAuto = false;
             }
 
-            overrideAutoRotateAndCrop(request, mRotationOverride, mRotateAndCropOverride);
+            overrideAutoRotateAndCrop(request, mCompatInfo, mRotateAndCropOverride);
         }
 
         if (autoframingSessionKey) {
@@ -3153,7 +3154,7 @@ Camera3Device::RequestThread::RequestThread(wp<Camera3Device> parent,
         sp<HalInterface> interface, const Vector<int32_t>& sessionParamKeys,
         bool useHalBufManager,
         bool supportCameraMute,
-        int rotationOverride,
+        const CameraCompatibilityInfo& compatInfo,
         bool supportSettingsOverride) :
         Thread(/*canCallJava*/false),
         mParent(parent),
@@ -3187,7 +3188,7 @@ Camera3Device::RequestThread::RequestThread(wp<Camera3Device> parent,
         mLatestSessionParams(sessionParamKeys.size()),
         mUseHalBufManager(useHalBufManager),
         mSupportCameraMute(supportCameraMute),
-        mRotationOverride(rotationOverride),
+        mCompatInfo(compatInfo),
         mSupportSettingsOverride(supportSettingsOverride) {
     mStatusId = statusTracker->addComponent("RequestThread");
     mVndkVersion = getVNDKVersion();
@@ -3739,11 +3740,11 @@ bool Camera3Device::RequestThread::threadLoop() {
         sp<CaptureRequest> captureRequest = nextRequest.captureRequest;
         captureRequest->mTestPatternChanged = overrideTestPattern(captureRequest);
         // Do not override rotate&crop for stream configurations that include
-        // SurfaceViews(HW_COMPOSER) output, unless mRotationOverride is set.
+        // SurfaceViews(HW_COMPOSER) output, unless mCompatInfo is set.
         // The display rotation there will be compensated by NATIVE_WINDOW_TRANSFORM_INVERSE_DISPLAY
-        using hardware::ICameraService::ROTATION_OVERRIDE_NONE;
         captureRequest->mRotateAndCropChanged =
-                (mComposerOutput && (mRotationOverride == ROTATION_OVERRIDE_NONE)) ?
+                (mComposerOutput && (!mCompatInfo.shouldRotateAndCrop()
+                                     && !mCompatInfo.shouldOverrideSensorOrientation())) ?
                         false : overrideAutoRotateAndCrop(captureRequest);
         captureRequest->mAutoframingChanged = overrideAutoframing(captureRequest);
         injectSessionParams(captureRequest, mInjectedSessionParams);
@@ -5075,16 +5076,16 @@ status_t Camera3Device::RequestThread::addFakeTriggerIds(
 bool Camera3Device::RequestThread::overrideAutoRotateAndCrop(const sp<CaptureRequest> &request) {
     ATRACE_CALL();
     Mutex::Autolock l(mTriggerMutex);
-    return Camera3Device::overrideAutoRotateAndCrop(request, this->mRotationOverride,
+    return Camera3Device::overrideAutoRotateAndCrop(request, this->mCompatInfo,
             this->mRotateAndCropOverride);
 }
 
 bool Camera3Device::overrideAutoRotateAndCrop(const sp<CaptureRequest> &request,
-        int rotationOverride,
+        const CameraCompatibilityInfo& compatInfo,
         camera_metadata_enum_android_scaler_rotate_and_crop_t rotateAndCropOverride) {
     ATRACE_CALL();
 
-    if (rotationOverride != hardware::ICameraService::ROTATION_OVERRIDE_NONE) {
+    if (compatInfo.shouldRotateAndCrop()) {
         uint8_t rotateAndCrop_u8 = rotateAndCropOverride;
         CameraMetadata &metadata = request->mSettingsList.begin()->metadata;
         metadata.update(ANDROID_SCALER_ROTATE_AND_CROP,
@@ -5933,14 +5934,10 @@ status_t Camera3Device::deriveAndSetTransformLocked(
         Camera3OutputStreamInterface& stream, int mirrorMode, int surfaceId) {
     int transform = -1;
     bool enableTransformInverseDisplay = true;
-    using hardware::ICameraService::ROTATION_OVERRIDE_ROTATION_ONLY;
-    using hardware::ICameraService::ROTATION_OVERRIDE_ROTATION_ONLY_REVERSE;
-    bool rotationOnlyOverride = mRotationOverride == ROTATION_OVERRIDE_ROTATION_ONLY;
-    bool reverseRotationOnlyOverride =
-            wm_flags::enable_camera_compat_check_device_rotation_bugfix() &&
-                    mRotationOverride == ROTATION_OVERRIDE_ROTATION_ONLY_REVERSE;
     if (wm_flags::enable_camera_compat_for_desktop_windowing()) {
-        enableTransformInverseDisplay = !rotationOnlyOverride && !reverseRotationOnlyOverride;
+        bool justRotateAndCrop = mCompatInfo.shouldRotateAndCrop()
+                                 && !mCompatInfo.shouldOverrideSensorOrientation();
+        enableTransformInverseDisplay = !justRotateAndCrop;
     }
     int res = CameraUtils::getRotationTransform(mDeviceInfo, mirrorMode,
             enableTransformInverseDisplay, &transform);
