@@ -815,8 +815,6 @@ Status AudioPolicyService::getInputForAttr(const media::audio::common::AudioAttr
         inputSource = AudioSource::MIC;
     }
 
-    const bool isCallRedir = (attr.flags & AUDIO_FLAG_CALL_REDIRECTION) != 0;
-
     //TODO(b/374751406): remove forcing canBypassConcurrentPolicy to canCaptureOutput
     // once all system apps using CAPTURE_AUDIO_OUTPUT to capture during calls
     // are updated to use the new BYPASS_CONCURRENT_RECORD_AUDIO_RESTRICTION permission.

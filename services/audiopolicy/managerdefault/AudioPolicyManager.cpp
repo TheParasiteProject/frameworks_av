@@ -3025,7 +3025,6 @@ AudioPolicyManager::getInputForAttr(audio_attributes_t attributes_,
     sp<RecordClientDescriptor> clientDesc;
     uid_t uid = static_cast<uid_t>(attributionSource.uid);
     bool isSoundTrigger;
-    int vdi = 0 /* default device id */;
     audio_io_handle_t input = AUDIO_IO_HANDLE_NONE;
 
     if (attributes_.source == AUDIO_SOURCE_DEFAULT) {

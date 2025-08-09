@@ -5528,7 +5528,6 @@ PlaybackThread::mixer_state MixerThread::prepareTracks_l(
 
     mixer_state mixerStatus = MIXER_IDLE;
     // find out which tracks need to be processed
-    size_t count = mActiveTracks.size();
     size_t mixedTracks = 0;
     size_t tracksWithEffect = 0;
     // counts only _active_ fast tracks

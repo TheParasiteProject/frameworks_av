@@ -2154,7 +2154,6 @@ void AudioFlinger::onSupportedLatencyModesChanged(
                         modes, legacy2aidl_audio_latency_mode_t_AudioLatencyMode));
 
     audio_utils::lock_guard _l(clientMutex());
-    size_t size = mNotificationClients.size();
     for (const auto& [_, client] : mNotificationClients) {
         client->audioFlingerClient()->onSupportedLatencyModesChanged(outputAidl, modesAidl);
     }
@@ -3644,7 +3643,6 @@ std::vector< sp<IAfEffectModule> > AudioFlinger::purgeOrphanEffectChains_l()
 // dumpToThreadLog_l() must be called with AudioFlinger::mutex() held
 void AudioFlinger::dumpToThreadLog_l(const sp<IAfThreadBase> &thread)
 {
-    constexpr int THREAD_DUMP_TIMEOUT_MS = 2;
     constexpr auto PREFIX = "- ";
     using ::android::audio_utils::FdToString;
 
