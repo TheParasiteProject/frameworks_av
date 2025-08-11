@@ -187,8 +187,10 @@ void AudioPolicyManager::addRoutableDeviceToProfiles(const sp<DeviceDescriptor> 
 
             bool isSupported = profile->supportsDevice(device);
 
-            // When flag is disabled, routable should be equivalent to supported.
+            // When flag is disabled or there is not dynamic profiles,
+            // routable should be equivalent to supported.
             bool isRoutable =
+                !profile->hasDynamicAudioProfile() ||
                 !com::android::media::audioserver::enable_strict_port_routing_checks() ||
                 !com::android::media::audio::check_route_in_get_audio_mix_port() ||
                 mpClientInterface->getAudioMixPort(&devicePort, &mixPort,
