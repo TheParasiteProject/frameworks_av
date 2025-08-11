@@ -995,7 +995,7 @@ void AudioPolicyManager::setPhoneState(audio_mode_t state)
         for (size_t i = 0; i < mOutputs.size(); i++) {
             sp<SwAudioOutputDescriptor> desc = mOutputs.valueAt(i);
             if (desc->mPreferredAttrInfo != nullptr) {
-                DeviceVector newDevices = getNewOutputDevices(desc, true /*fromCache*/);
+                DeviceVector newDevices = getNewOutputDevices(desc, false /*fromCache*/);
                 // If the output is using preferred mixer attributes and the audio mode is not
                 // normal, the output need to reopen with default configuration.
                 outputsToReopen.emplace(mOutputs.keyAt(i), newDevices);
@@ -1025,7 +1025,7 @@ void AudioPolicyManager::setPhoneState(audio_mode_t state)
     // reevaluate routing on all outputs in case tracks have been started during the call
     for (size_t i = 0; i < mOutputs.size(); i++) {
         sp<SwAudioOutputDescriptor> desc = mOutputs.valueAt(i);
-        DeviceVector newDevices = getNewOutputDevices(desc, true /*fromCache*/);
+        DeviceVector newDevices = getNewOutputDevices(desc, false /*fromCache*/);
         if (state != AUDIO_MODE_IN_CALL || (desc != mPrimaryOutput && !isTelephonyRxOrTx(desc))) {
             bool forceRouting = !newDevices.isEmpty();
             setOutputDevices(__func__, desc, newDevices, forceRouting, 0 /*delayMs*/, nullptr,
