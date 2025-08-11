@@ -2159,11 +2159,9 @@ void AudioFlinger::onSupportedLatencyModesChanged(
     }
 }
 
-void AudioFlinger::onHardError(std::set<audio_port_handle_t>& trackPortIds) {
-    ALOGI("releasing tracks due to a hard error occurred on an I/O thread");
-    for (const auto portId : trackPortIds) {
-        AudioSystem::releaseOutput(portId);
-    }
+void AudioFlinger::onHardError(audio_io_handle_t output) {
+    ALOGI("releasing tracks and closing output %d due to a hard error", output);
+    AudioSystem::forceReleaseDirectOutput(output);
 }
 
 const IPermissionProvider& AudioFlinger::getPermissionProvider() {

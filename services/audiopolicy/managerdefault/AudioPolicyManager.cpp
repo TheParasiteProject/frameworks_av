@@ -2970,6 +2970,37 @@ bool AudioPolicyManager::releaseOutput(audio_port_handle_t portId)
     return false;
 }
 
+status_t AudioPolicyManager::forceReleaseDirectOutput(audio_io_handle_t output) {
+    ALOGV("%s output %d", __func__, output);
+    sp<SwAudioOutputDescriptor> outputDesc = mOutputs.valueFor(output);
+    if (outputDesc == 0) {
+        ALOGW("%s() no output for handle %d", __func__, output);
+        return BAD_VALUE;
+    }
+    if ((outputDesc->mFlags & AUDIO_OUTPUT_FLAG_DIRECT) == 0) {
+        ALOGW("%s() output for handle %d is not a direct output, flags: %8x",
+                __func__, output, outputDesc->mFlags);
+        return BAD_VALUE;
+    }
+
+    std::vector<audio_port_handle_t> portIds;
+    for (const auto& client : outputDesc->getClientIterable()) {
+        const audio_port_handle_t portId = client->portId();
+        if (outputDesc->isClientActive(client)) {
+            ALOGW("%s() inactivates portId %d in good faith", __func__, portId);
+            stopOutput(portId);
+        }
+        portIds.push_back(portId);
+    }
+    for (const auto portId : portIds) {
+        outputDesc->removeClient(portId);
+    }
+
+    outputDesc->mDirectOpenCount = 0;
+    closeOutput(outputDesc->mIoHandle);
+    mpClientInterface->onAudioPortListUpdate();
+    return OK;
+}
 
 static AudioPolicyClientInterface::MixType getMixType(audio_devices_t deviceType,
                                                       bool externallyRouted,
