@@ -5363,6 +5363,10 @@ TEST_F_WITH_FLAGS(
     const audio_devices_t kUsbOutHsType = AUDIO_DEVICE_OUT_USB_HEADSET;
     const std::string usbAddrs[NUM_DEVICES] = {"card=1;device=0", "card=2;device=0"};
 
+    mClient->addSupportedFormat(AUDIO_FORMAT_PCM_16_BIT);
+    mClient->addSupportedChannelMask(AUDIO_CHANNEL_OUT_STEREO);
+    mClient->addSupportedChannelMask(AUDIO_CHANNEL_IN_STEREO);
+
     // This test is based on XML config parsing and does not have HAL IDs.
     // We assign some unique numbers to test this AIDL feature.
     int32_t halIdCounter = AUDIO_PORT_HANDLE_NONE + 1;

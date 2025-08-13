@@ -606,7 +606,10 @@ private:
 
         private:
             wp<AudioPolicyService> mService;
-            std::atomic_bool mSensorPrivacyEnabled = false;
+            audio_utils::mutex mMutex;
+            bool mSensorPrivacyEnabled GUARDED_BY(mMutex) = false;
+            bool mSwMicPrivacyEnabled GUARDED_BY(mMutex) = false;
+            bool mHwMicPrivacyEnabled GUARDED_BY(mMutex) = false;
     };
 
     // Thread used to send audio config commands to audio flinger
