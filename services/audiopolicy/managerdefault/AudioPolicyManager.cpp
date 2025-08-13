@@ -8022,22 +8022,6 @@ DeviceVector AudioPolicyManager::getNewOutputDevices(const sp<SwAudioOutputDescr
                 ALOGW("%s: no device were retrieved for specified attributes", __func__);
             }
 
-            if (!outputDesc->isDuplicated()
-                    && com::android::media::audioserver::enable_strict_port_routing_checks()
-                    && com::android::media::audio::check_route_in_get_audio_mix_port()) {
-                // Filter out devices that are indicated by the HAL as non-routable.
-                auto routableDevices = devices.filter([&](auto device) {
-                      return outputDesc->mProfile->routesToDevice(device); });
-
-                if (routableDevices.empty()) {
-                    ALOGW("%s: no device in %s are routable for profile %s", __func__,
-                          routableDevices.toString().c_str(),
-                          outputDesc->mProfile->getTagName().c_str());
-                }
-
-                devices = routableDevices;
-            }
-
             break;
         }
     }
