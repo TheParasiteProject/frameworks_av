@@ -70,7 +70,6 @@ namespace audioserver_flags = com::android::media::audioserver;
 namespace android {
 
 using ::android::aidl_utils::binderStatusFromStatusT;
-using ::com::android::media::audio::hardening_impl;
 using ::com::android::media::audio::hardening_partial;
 using ::com::android::media::audio::hardening_strict;
 using binder::Status;
@@ -3728,47 +3727,45 @@ AfPlaybackCommon::AfPlaybackCommon(IAfTrackBase& self, IAfThreadBase& thread,
     using media::permission::skipOpsForUid;
     using media::permission::ValidatedAttributionSourceState;
 
-    if (hardening_impl()) {
-        // Don't bother for trusted uids
-        if (!skipOpsForUid(attributionSource.uid) && shouldPlaybackHarden) {
-            if (isOffloadOrMmap) {
-                mExecutor.emplace();
-            }
-            auto thread_wp = wp<IAfThreadBase>::fromExisting(&thread);
-            mOpControlPartialSession.emplace(
-                    ValidatedAttributionSourceState::createFromTrustedSource(attributionSource),
-                    Ops{.attributedOp = OP_CONTROL_AUDIO_PARTIAL},
-                    [this, isOffloadOrMmap, thread_wp](bool isPermitted) {
-                        mHasOpControlPartial.store(isPermitted, std::memory_order_release);
-                        if (isOffloadOrMmap) {
-                            mExecutor->enqueue(mediautils::Runnable{[thread_wp]() {
-                                auto thread = thread_wp.promote();
-                                if (thread != nullptr) {
-                                    audio_utils::lock_guard l {thread->mutex()};
-                                    thread->broadcast_l();
-                                }
-                            }});
-                        }
-                    }
-            );
-            // Same as previous but for mHasOpControlFull, OP_CONTROL_AUDIO
-            mOpControlFullSession.emplace(
-                    ValidatedAttributionSourceState::createFromTrustedSource(attributionSource),
-                    Ops{.attributedOp = OP_CONTROL_AUDIO},
-                    [this, isOffloadOrMmap, thread_wp](bool isPermitted) {
-                        mHasOpControlFull.store(isPermitted, std::memory_order_release);
-                        if (isOffloadOrMmap) {
-                            mExecutor->enqueue(mediautils::Runnable{[thread_wp]() {
-                                auto thread = thread_wp.promote();
-                                if (thread != nullptr) {
-                                    audio_utils::lock_guard l {thread->mutex()};
-                                    thread->broadcast_l();
-                                }
-                            }});
-                        }
-                    }
-            );
+    // Don't bother for trusted uids
+    if (!skipOpsForUid(attributionSource.uid) && shouldPlaybackHarden) {
+        if (isOffloadOrMmap) {
+            mExecutor.emplace();
         }
+        auto thread_wp = wp<IAfThreadBase>::fromExisting(&thread);
+        mOpControlPartialSession.emplace(
+                ValidatedAttributionSourceState::createFromTrustedSource(attributionSource),
+                Ops{.attributedOp = OP_CONTROL_AUDIO_PARTIAL},
+                [this, isOffloadOrMmap, thread_wp](bool isPermitted) {
+                    mHasOpControlPartial.store(isPermitted, std::memory_order_release);
+                    if (isOffloadOrMmap) {
+                        mExecutor->enqueue(mediautils::Runnable{[thread_wp]() {
+                            auto thread = thread_wp.promote();
+                            if (thread != nullptr) {
+                                audio_utils::lock_guard l {thread->mutex()};
+                                thread->broadcast_l();
+                            }
+                        }});
+                    }
+                }
+        );
+        // Same as previous but for mHasOpControlFull, OP_CONTROL_AUDIO
+        mOpControlFullSession.emplace(
+                ValidatedAttributionSourceState::createFromTrustedSource(attributionSource),
+                Ops{.attributedOp = OP_CONTROL_AUDIO},
+                [this, isOffloadOrMmap, thread_wp](bool isPermitted) {
+                    mHasOpControlFull.store(isPermitted, std::memory_order_release);
+                    if (isOffloadOrMmap) {
+                        mExecutor->enqueue(mediautils::Runnable{[thread_wp]() {
+                            auto thread = thread_wp.promote();
+                            if (thread != nullptr) {
+                                audio_utils::lock_guard l {thread->mutex()};
+                                thread->broadcast_l();
+                            }
+                        }});
+                    }
+                }
+        );
     }
 }
 
