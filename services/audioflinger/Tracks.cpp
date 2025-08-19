@@ -725,10 +725,14 @@ sp<OpPlayAudioMonitor> OpPlayAudioMonitor::createIfNeeded(
             const AttributionSourceState& attributionSource, const audio_attributes_t& attr, int id,
             audio_stream_type_t streamType)
 {
-    const uid_t uid = VALUE_OR_FATAL(aidl2legacy_int32_t_uid_t(attributionSource.uid));
+    const uid_t uid = attributionSource.uid;
+
     if (isServiceUid(uid)) {
-        ALOGW("OpPlayAudio: not muting track:%d usage:%d for service UID %d", id, attr.usage,
+        const auto res = thread->afThreadCallback()->getPermissionProvider().getPackagesForUid(uid);
+        if (res.ok() && res->empty()) {
+            ALOGW("OpPlayAudio: not muting track:%d usage:%d for service UID %d", id, attr.usage,
               uid);
+        }
         return nullptr;
     }
     // stream type has been filtered by audio policy to indicate whether it can be muted
