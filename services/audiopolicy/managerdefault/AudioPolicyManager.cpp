@@ -8659,10 +8659,12 @@ float AudioPolicyManager::computeVolume(IVolumeCurves &curves,
     const auto musicVolumeSrc = toVolumeSource(AUDIO_STREAM_MUSIC, false);
     const auto alarmVolumeSrc = toVolumeSource(AUDIO_STREAM_ALARM, false);
     const auto a11yVolumeSrc = toVolumeSource(AUDIO_STREAM_ACCESSIBILITY, false);
-    if (AUDIO_MODE_RINGTONE == mEngine->getPhoneState() &&
+    if (volumeSource == a11yVolumeSrc && AUDIO_MODE_RINGTONE == mEngine->getPhoneState() &&
             mOutputs.isActive(ringVolumeSrc, 0)) {
         auto &ringCurves = getVolumeCurves(AUDIO_STREAM_RING);
-        const float ringVolumeDb = computeVolume(ringCurves, ringVolumeSrc, index, deviceTypes,
+        const float ringVolumeDb = computeVolume(ringCurves, ringVolumeSrc,
+                                                 rescaleVolumeIndex(index, a11yVolumeSrc,
+                                                                    ringVolumeSrc), deviceTypes,
                                                  adjustAttenuation,
                                                  /* computeInternalInteraction= */false);
         return ringVolumeDb - 4 > volumeDb ? ringVolumeDb - 4 : volumeDb;
