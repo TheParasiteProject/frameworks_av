@@ -2442,7 +2442,8 @@ class MmapPlaybackThread : public MmapThread,
         public virtual VolumeInterface {
 public:
     MmapPlaybackThread(const sp<IAfThreadCallback>& afThreadCallback, audio_io_handle_t id,
-                       AudioHwDevice *hwDev, AudioStreamOut *output, bool systemReady);
+                       AudioHwDevice *hwDev, AudioStreamOut *output, bool systemReady,
+                       const std::shared_ptr<audio_utils::TimerQueue>& timerQueue);
 
     void configure(const audio_attributes_t* attr,
                    audio_stream_type_t streamType,
@@ -2502,7 +2503,7 @@ protected:
     bool mMasterMute GUARDED_BY(mutex());
     mediautils::atomic_sp<audio_utils::MelProcessor> mMelProcessor;  // locked internally
 
-    std::unique_ptr<audio_utils::TimerQueue> mTq GUARDED_BY(mutex());
+    const std::shared_ptr<audio_utils::TimerQueue> mTimerQueue;  // (non-null) locked internally
     audio_utils::TimerQueue::handle_t mWakeUpHandle GUARDED_BY(mutex())
             {audio_utils::TimerQueue::INVALID_HANDLE};
 };
