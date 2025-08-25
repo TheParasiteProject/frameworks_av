@@ -1002,6 +1002,9 @@ status_t AudioFlinger::dump(int fd, const Vector<String16>& args)
     if (parsedArgs.shouldDumpStats) {
         dprintf(fd, "\n ## BEGIN stats dump \n");
         dumpStats(fd);
+
+        dprintf(fd, "\n ## BEGIN TimerQueue dump\n");
+        dprintf(fd, "%s\n", mTimerQueue->toString().c_str());
     }
 
     if (parsedArgs.shouldDumpMem) {
