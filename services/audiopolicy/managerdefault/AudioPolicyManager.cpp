@@ -3910,9 +3910,8 @@ status_t AudioPolicyManager::setVolumeIndexForGroup(volume_group_t group,
                 && curSrcDevices.find(curVoiceDevice) != curSrcDevices.end()) {
             bool isVoiceVolSrc;
             bool isBtScoVolSrc;
-            if (isVolumeConsistentForCalls(vs, {rxSinkDevice},
-                    isVoiceVolSrc, isBtScoVolSrc, __func__)
-                    && (isVoiceVolSrc || isBtScoVolSrc)) {
+            updateVoiceBtScoVolumeSrcForCalls(vs, isVoiceVolSrc, isBtScoVolSrc);
+            if (isVoiceVolSrc || isBtScoVolSrc) {
                 bool voiceVolumeManagedByHost = !isBtScoVolSrc &&
                         !audio_is_ble_out_device(rxSinkDevice);
                 setVoiceVolume(index, curves, voiceVolumeManagedByHost, 0);
@@ -8829,13 +8828,7 @@ status_t AudioPolicyManager::checkAndSetVolume(IVolumeCurves &curves,
     }
     bool isVoiceVolSrc;
     bool isBtScoVolSrc;
-    if (!isVolumeConsistentForCalls(
-            volumeSource, deviceTypes, isVoiceVolSrc, isBtScoVolSrc, __func__)) {
-        // Do not return an error here as AudioService will always set both voice call
-        // and Bluetooth SCO volumes due to stream aliasing.
-        return NO_ERROR;
-    }
-
+    updateVoiceBtScoVolumeSrcForCalls(volumeSource, isVoiceVolSrc, isBtScoVolSrc);
     if (deviceTypes.empty()) {
         deviceTypes = outputDesc->devices().types();
         index = curves.getVolumeIndex(deviceTypes);
@@ -8904,35 +8897,17 @@ void AudioPolicyManager::setVoiceVolume(
     }
 }
 
-bool AudioPolicyManager::isVolumeConsistentForCalls(VolumeSource volumeSource,
-                                                   const DeviceTypeSet& deviceTypes,
-                                                   bool& isVoiceVolSrc,
-                                                   bool& isBtScoVolSrc,
-                                                   const char* caller) {
+void AudioPolicyManager::updateVoiceBtScoVolumeSrcForCalls(VolumeSource volumeSource,
+                                                          bool& isVoiceVolSrc,
+                                                          bool& isBtScoVolSrc) {
     const VolumeSource callVolSrc = toVolumeSource(AUDIO_STREAM_VOICE_CALL, false);
     isVoiceVolSrc = (volumeSource != VOLUME_SOURCE_NONE) && (callVolSrc == volumeSource);
 
     const bool isScoRequested = isScoRequestedForComm();
     const bool isHAUsed = isHearingAidUsedForComm();
 
-    if (com_android_media_audio_replace_stream_bt_sco()) {
-        isBtScoVolSrc = (volumeSource != VOLUME_SOURCE_NONE) && (callVolSrc == volumeSource) &&
-                        (isScoRequested || isHAUsed);
-        return true;
-    }
-
-    const VolumeSource btScoVolSrc = toVolumeSource(AUDIO_STREAM_BLUETOOTH_SCO, false);
-    isBtScoVolSrc = (volumeSource != VOLUME_SOURCE_NONE) && (btScoVolSrc == volumeSource);
-
-    if ((callVolSrc != btScoVolSrc) &&
-            ((isVoiceVolSrc && isScoRequested) ||
-             (isBtScoVolSrc && !(isScoRequested || isHAUsed))) &&
-            !isSingleDeviceType(deviceTypes, AUDIO_DEVICE_OUT_TELEPHONY_TX)) {
-        ALOGV("%s cannot set volume group %d volume when is%srequested for comm", caller,
-             volumeSource, isScoRequested ? " " : " not ");
-        return false;
-    }
-    return true;
+    isBtScoVolSrc = (volumeSource != VOLUME_SOURCE_NONE) && (callVolSrc == volumeSource) &&
+                    (isScoRequested || isHAUsed);
 }
 
 void AudioPolicyManager::applyStreamVolumes(const sp<AudioOutputDescriptor>& outputDesc,
