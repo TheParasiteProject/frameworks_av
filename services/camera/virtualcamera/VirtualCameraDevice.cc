@@ -519,6 +519,15 @@ std::optional<AidlCameraMetadata> initCameraCharacteristics(
           "characteristics!");
     }
 
+    // internal values that can't be configured from external metadata
+    auto jpegMaxSizeVec = std::vector<int32_t>({kMaxJpegSize});
+    ret = metadataHelper.update(ANDROID_JPEG_MAX_SIZE, jpegMaxSizeVec.data(),
+                                jpegMaxSizeVec.size());
+    if (ret != OK) {
+      ALOGE(
+          "Failed to update ANDROID_JPEG_MAX_SIZE for camera characteristics!");
+    }
+
     ret = updateStreamConfigurations(metadataHelper, supportedInputConfig);
     if (ret != OK) {
       ALOGE(
