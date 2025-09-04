@@ -11202,18 +11202,26 @@ void MmapThread::checkInvalidTracks_l()
     }
 }
 
-void MmapThread::dumpInternals_l(int fd, const Vector<String16>& /* args */)
+void MmapThread::dumpInternals_l(int fd, const Vector<String16>& args)
 {
     if (isOutput()) {
         AudioStreamOut *output = mOutput;
         audio_output_flags_t flags = output != NULL ? output->flags : AUDIO_OUTPUT_FLAG_NONE;
         dprintf(fd, "  AudioStreamOut: %p flags %#x (%s)\n",
                 output, flags, toString(flags).c_str());
+        if (output != nullptr && output->stream) {
+            dprintf(fd, "  Hal stream dump:\n");
+            (void)output->stream->dump(fd, args);
+        }
     } else {
         AudioStreamIn *input = mInput;
         audio_input_flags_t flags = input != NULL ? input->flags : AUDIO_INPUT_FLAG_NONE;
         dprintf(fd, "  AudioStreamIn: %p flags %#x (%s)\n",
                 input, flags, toString(flags).c_str());
+        if (input != nullptr && input->stream) {
+            dprintf(fd, "  Hal stream dump:\n");
+            (void)input->stream->dump(fd);
+        }
     }
     dprintf(fd, "  Attributes: content type %d usage %d source %d\n",
             mAttr.content_type, mAttr.usage, mAttr.source);
