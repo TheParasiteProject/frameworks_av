@@ -5935,9 +5935,7 @@ status_t Camera3Device::deriveAndSetTransformLocked(
     int transform = -1;
     bool enableTransformInverseDisplay = true;
     if (wm_flags::enable_camera_compat_for_desktop_windowing()) {
-        bool justRotateAndCrop = mCompatInfo.shouldRotateAndCrop()
-                                 && !mCompatInfo.shouldOverrideSensorOrientation();
-        enableTransformInverseDisplay = !justRotateAndCrop;
+        enableTransformInverseDisplay &= mCompatInfo.shouldAllowTransformInverseDisplay();
     }
     int res = CameraUtils::getRotationTransform(mDeviceInfo, mirrorMode,
             enableTransformInverseDisplay, &transform);
