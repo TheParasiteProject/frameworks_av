@@ -79,7 +79,7 @@ namespace flags = ::android::companion::virtualdevice::flags;
 // Prefix of camera name - "device@1.1/virtual/{camera_id}"
 const char* kDevicePathPrefix = "device@1.1/virtual/";
 
-constexpr int32_t kMaxJpegSize = 3 * 1024 * 1024 /*3MiB*/;
+constexpr int32_t kMaxJpegSize = 13 * 1024 * 1024 /* 13MiB */;
 
 constexpr std::chrono::nanoseconds kMaxFrameDuration =
     std::chrono::duration_cast<std::chrono::nanoseconds>(
