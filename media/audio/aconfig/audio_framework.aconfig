@@ -37,6 +37,13 @@ flag {
 }
 
 flag {
+    name: "ble_hearing_aid_device"
+    namespace: "media_audio"
+    description: "Add BLE hearing aid device category"
+    bug: "443740527"
+}
+
+flag {
     name: "cache_get_stream_min_max_volume"
     namespace: "media_audio"
     description:
