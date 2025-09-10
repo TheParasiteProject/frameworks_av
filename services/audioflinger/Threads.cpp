@@ -8061,7 +8061,7 @@ void SpatializerThread::setHalLatencyMode_l() {
 }
 
 status_t SpatializerThread::setRequestedLatencyMode(audio_latency_mode_t mode) {
-    if (mode < 0 || mode >= AUDIO_LATENCY_MODE_CNT) {
+    if (mode < 0 || static_cast<int>(mode) >= AUDIO_LATENCY_MODE_CNT) {
         return BAD_VALUE;
     }
     audio_utils::lock_guard _l(mutex());
