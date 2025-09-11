@@ -2510,6 +2510,8 @@ protected:
     const std::shared_ptr<audio_utils::TimerQueue> mTimerQueue;  // (non-null) locked internally
     audio_utils::TimerQueue::handle_t mWakeUpHandle GUARDED_BY(mutex())
             {audio_utils::TimerQueue::INVALID_HANDLE};
+    atomic_int mTimerQueueCallbacks = 0;
+    atomic_int64_t mTimerQueueCallbackNs = 0;
 };
 
 class MmapCaptureThread : public MmapThread

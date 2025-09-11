@@ -11205,18 +11205,26 @@ void MmapThread::checkInvalidTracks_l()
     }
 }
 
-void MmapThread::dumpInternals_l(int fd, const Vector<String16>& /* args */)
+void MmapThread::dumpInternals_l(int fd, const Vector<String16>& args)
 {
     if (isOutput()) {
         AudioStreamOut *output = mOutput;
         audio_output_flags_t flags = output != NULL ? output->flags : AUDIO_OUTPUT_FLAG_NONE;
         dprintf(fd, "  AudioStreamOut: %p flags %#x (%s)\n",
                 output, flags, toString(flags).c_str());
+        if (output != nullptr && output->stream) {
+            dprintf(fd, "  Hal stream dump:\n");
+            (void)output->stream->dump(fd, args);
+        }
     } else {
         AudioStreamIn *input = mInput;
         audio_input_flags_t flags = input != NULL ? input->flags : AUDIO_INPUT_FLAG_NONE;
         dprintf(fd, "  AudioStreamIn: %p flags %#x (%s)\n",
                 input, flags, toString(flags).c_str());
+        if (input != nullptr && input->stream) {
+            dprintf(fd, "  Hal stream dump:\n");
+            (void)input->stream->dump(fd);
+        }
     }
     dprintf(fd, "  Attributes: content type %d usage %d source %d\n",
             mAttr.content_type, mAttr.usage, mAttr.source);
@@ -11502,9 +11510,32 @@ status_t MmapPlaybackThread::drain(int64_t wakeUpNanos, bool /*allowSoftWakeUp*/
             return NO_ERROR;
         }
         auto weakPtr = wp<MmapPlaybackThread>::fromExisting(this);
-        *handle = mTimerQueue->add([weakPtr]() {
-            auto strongPtr = weakPtr.promote();
-            strongPtr->onWakeUp();
+
+        *handle = mTimerQueue->add([weakPtr, this]() {
+            constexpr bool kAcquireWakelock = true;
+            constexpr bool kCheckDisplay = true;
+            const auto strongPtr = weakPtr.promote();
+            if (strongPtr) {  // if strongPr exists, "this" is valid
+                const auto startTime = systemTime(SYSTEM_TIME_BOOTTIME);
+
+                if constexpr (kAcquireWakelock) {
+                    // check screenstate and only acquire the wakelock if the display is off
+                    // as the device will not suspend with an active display.
+                    const bool displayOff = !kCheckDisplay ||
+                            (mAfThreadCallback->getScreenState() & 1);
+                    if (displayOff) {
+                        // acquire the wakelock here, the next drain call or stop
+                        // will release it.
+                        audio_utils::lock_guard _l(mutex());
+                        if (!mWakeLockToken) acquireWakeLock_l();
+                        ALOGV("MmapCallback: acquiring wakelock");
+                    }
+                }
+                onWakeUp();
+                // handle statistics
+                ++mTimerQueueCallbacks;
+                mTimerQueueCallbackNs += systemTime(SYSTEM_TIME_BOOTTIME) - startTime;
+            }
         }, wakeUpNanos);
         mWakeUpHandle = *handle;
     }
@@ -11597,6 +11628,8 @@ void MmapPlaybackThread::dumpInternals_l(int fd, const Vector<String16>& args)
     dprintf(fd, "  HAL volume: %f", mHalVolFloat);
     dprintf(fd, "\n");
     dprintf(fd, "  Master volume: %f Master mute %d\n", mMasterVolume, mMasterMute);
+    dprintf(fd, "  TimerQueueCallbacks: %d\n", mTimerQueueCallbacks.load());
+    dprintf(fd, "  TimerQueueCallback Ms: %lf\n", mTimerQueueCallbackNs.load() * 1e-6);
 }
 
 /* static */
