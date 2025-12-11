@@ -60,7 +60,7 @@ cc_defaults {
         "-Werror",
         "-Wall",
     ] + select(soong_config_variable("media", "needs_mutexlock_disabled_for_vtservice"), {
-        "true": ["-DMEDIA_NEEDS_MUTEXLOCK_DISABLED_FOR_VTSERVICE"],
+        true: ["-DMEDIA_NEEDS_MUTEXLOCK_DISABLED_FOR_VTSERVICE"],
         default: [],
     }),
 
