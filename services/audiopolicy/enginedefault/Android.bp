@@ -20,7 +20,7 @@ cc_library_shared {
         "-Wextra",
         "-fvisibility=hidden",
     ] + select(soong_config_variable("libaudiopolicyengine", "prioritize_builin_over_back_mic"), {
-        "true": ["-DPRIORITIZE_BUILTIN_OVER_BACK_MIC"],
+        true: ["-DPRIORITIZE_BUILTIN_OVER_BACK_MIC"],
         default: [],
     }),
     header_libs: [
